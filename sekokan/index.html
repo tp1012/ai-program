@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>施工管理体験：工程管理システム</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons (初期ロード用) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- 外部設定ファイルの読み込み -->
+    <script src="config.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        
+        /* ガントチャートセルの基本スタイル */
+        .gantt-cell { 
+            position: relative;
+            transition: background-color 0.1s ease; 
+            user-select: none;
+        }
+        
+        /* 配置済み（確定）: 薄い水色 */
+        .cell-selected {
+            background-color: #bae6fd !important; /* sky-200 */
+            cursor: grab;
+        }
+        .cell-selected:active {
+            cursor: grabbing;
+        }
+        
+        /* ホバー・ドラッグ時のプレビュー */
+        .cell-preview {
+            background-color: rgba(186, 230, 253, 0.5) !important;
+        }
+
+        .animate-fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .gantt-table { 
+            table-layout: auto; 
+            min-width: 100%; 
+            border-spacing: 0; 
+        }
+        .gantt-table td, .gantt-table th { 
+            white-space: nowrap; 
+        }
+        .task-name-cell {
+            min-width: 280px;
+            white-space: normal !important;
+            word-break: break-all;
+            padding-right: 1.5rem;
+        }
+
+        /* 管理者画面のドラッグ用スタイル */
+        .dragging {
+            opacity: 0.5;
+            background-color: #f1f5f9;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen overflow-x-hidden">
+    <div id="status-layer"></div>
+    <div id="main-content" class="min-h-screen flex flex-col justify-center"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Config ---
+        let firebaseConfig = window.firebaseConfig || null;
+        try {
+            if (typeof __firebase_config !== 'undefined' && (!firebaseConfig || firebaseConfig.apiKey === "あなたのAPIキー")) {
+                firebaseConfig = JSON.parse(__firebase_config);
+            }
+        } catch (e) {}
+
+        const appId = window.constructionAppId || (typeof __app_id !== 'undefined' ? __app_id : 'construction-sim-v3');
+        let db = null;
+        let auth = null;
+        const isConfigured = firebaseConfig && firebaseConfig.apiKey && firebaseConfig.apiKey !== "あなたのAPIキー";
+
+        if (isConfigured) {
+            const app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        }
+
+        // --- Global State ---
+        let state = {
+            view: 'landing', 
+            workshopId: '',
+            loading: false,
+            statusMessage: '',
+            user: null,
+            settings: {
+                goalDays: 30,
+                tasks: [
+                    { id: 1, name: "① 事前調査・現地確認", condition: "—（最初に実施）", baseDays: 2 },
+                    { id: 2, name: "② 機器発注・納品待ち", condition: "①完了後", baseDays: 10 },
+                    { id: 4, name: "④ 架台・盤の設置 ★", condition: "②と並行可", baseDays: 3 },
+                    { id: 3, name: "③ 機器搬入・開梱確認", condition: "②完了後", baseDays: 1 },
+                    { id: 5, name: "⑤ 配管・配線工事", condition: "④完了後", baseDays: 7 }
+                ]
+            },
+            schedule: {}
+        };
+
+        // ドラッグ管理用
+        let dragInfo = {
+            active: false,
+            taskId: null,
+            offset: 0
+        };
+
+        const SVGS = {
+            check: '<svg class="w-4 h-4 text-sky-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+            alert: '<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
+            zap: '<svg class="w-6 h-6 text-yellow-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.75V3.5a.5.5 0 0 1 .5-.5h10.5a.5.5 0 0 1 .5.5v11.25M4 14.75a2.25 2.25 0 1 0 4.5 0 2.25 2.25 0 1 0-4.5 0ZM19.5 14.75V3.5a.5.5 0 0 0-.5-.5H8.5a.5.5 0 0 0-.5.5v11.25M19.5 14.75a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 1 1 4.5 0Z"/></svg>'
+        };
+
+        // --- Logic ---
+        async function initAuth() {
+            if (!auth) return;
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) { 
+                console.error("Auth Error:", err); 
+                setStatus(`初期接続に失敗しました: [${err.code}]。S3の承認済みドメイン設定等をご確認ください。`);
+            }
+        }
+
+        if (auth) {
+            onAuthStateChanged(auth, (user) => {
+                state.user = user;
+                render();
+            });
+        }
+
+        function setStatus(msg) {
+            state.statusMessage = msg;
+            renderStatus();
+            if (msg) setTimeout(() => { state.statusMessage = ''; renderStatus(); }, 5000);
+        }
+
+        // 接続状況のチェックと自動回復
+        async function ensureAuth() {
+            if (!auth) return false;
+            if (!auth.currentUser) {
+                console.log("再認証を試みています...");
+                try {
+                    await signInAnonymously(auth);
+                    return true;
+                } catch (e) {
+                    console.error("Re-auth Error:", e);
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        async function saveSettings() {
+            if (!db) { setStatus('Firebase設定が不足しています。config.jsを確認してください。'); return; }
+            state.loading = true;
+            render();
+
+            const connected = await ensureAuth();
+            if (!connected) {
+                setStatus('エラー: クラウド接続を確立できません。S3ドメイン許可設定などを確認してください。');
+                state.loading = false;
+                render();
+                return;
+            }
+
+            const id = state.workshopId || Math.random().toString(36).substring(2, 8).toUpperCase();
+            state.workshopId = id;
+            render();
+            try {
+                const workshopRef = doc(db, 'artifacts', appId, 'public', 'data', 'workshops', id);
+                await setDoc(workshopRef, { 
+                    ...state.settings, 
+                    updatedAt: new Date().toISOString(), 
+                    createdBy: auth.currentUser ? auth.currentUser.uid : 'anonymous' 
+                });
+                setStatus(`保存完了 ID: ${id}`);
+            } catch (err) { 
+                console.error("Save Error:", err);
+                if (err.code === 'permission-denied') {
+                    setStatus('保存失敗: データベース書き込み権限がありません（セキュリティルールを確認してください）');
+                } else {
+                    setStatus(`保存失敗: [${err.code}] ${err.message}`);
+                }
+            } finally { 
+                state.loading = false; 
+                render(); 
+            }
+        }
+
+        async function loadWorkshop(id) {
+            if (!id) return;
+            if (!db) {
+                setStatus('Firebase設定が読み込めていません。config.jsが同一フォルダにあるか確認してください。');
+                return;
+            }
+            state.loading = true; 
+            render();
+
+            const connected = await ensureAuth();
+            if (!connected) {
+                setStatus('エラー: クラウドに接続できません。S3ドメイン許可制限をご確認ください。');
+                state.loading = false;
+                render();
+                return;
+            }
+
+            try {
+                const workshopRef = doc(db, 'artifacts', appId, 'public', 'data', 'workshops', id.trim().toUpperCase());
+                const snap = await getDoc(workshopRef);
+                if (snap.exists()) {
+                    state.settings = snap.data();
+                    state.workshopId = id.trim().toUpperCase();
+                    state.view = 'student';
+                    state.schedule = {};
+                    setStatus('参加しました');
+                } else { 
+                    setStatus('指定されたIDが見つかりません。管理者画面で保存されているか確認してください。'); 
+                }
+            } catch (err) { 
+                console.error("Load Error:", err);
+                if (err.code === 'permission-denied') {
+                    setStatus('読込エラー: データベースへのアクセス権限がありません（ルールを確認してください）');
+                } else {
+                    setStatus(`読込エラー: [${err.code}] S3のドメイン許可、またはネットワーク接続を確認してください。`); 
+                }
+            } finally { 
+                state.loading = false; 
+                render(); 
+            }
+        }
+
+        // --- Event Handlers ---
+        window.saveSettings = saveSettings;
+        window.changeView = (v) => { state.view = v; render(); };
+        window.updateGoal = (v) => { state.settings.goalDays = parseInt(v) || 0; renderPanel(); };
+        window.addTask = () => { if (state.settings.tasks.length < 10) { state.settings.tasks.push({ id: Date.now(), name: "新規タスク", condition: "条件", baseDays: 1 }); render(); } };
+        window.removeTask = (id) => { state.settings.tasks = state.settings.tasks.filter(t => t.id !== id); render(); };
+        window.updateTaskField = (id, f, v) => { const t = state.settings.tasks.find(x => x.id === id); if (t) t[f] = v; render(); };
+        window.handleJoin = () => loadWorkshop(document.getElementById('joinInput').value);
+        window.copyId = () => { navigator.clipboard.writeText(state.workshopId).then(() => setStatus('コピーしました')); };
+        window.resetSched = () => { state.schedule = {}; render(); renderPanel(); };
+        
+        window.cellMouseDown = (taskId, day) => {
+            const current = state.schedule[taskId];
+            if (current && day >= current.start && day <= current.end) {
+                dragInfo.active = true;
+                dragInfo.taskId = taskId;
+                dragInfo.offset = day - current.start;
+            } else {
+                const t = state.settings.tasks.find(x => x.id === taskId);
+                const start = day;
+                const end = day + parseInt(t.baseDays) - 1;
+                if (end > 30) return;
+                state.schedule[taskId] = { start, end };
+                render();
+                renderPanel();
+            }
+        };
+
+        window.cellMouseUp = (taskId, day) => {
+            if (dragInfo.active) {
+                dragInfo.active = false;
+                dragInfo.taskId = null;
+                render();
+                renderPanel();
+            }
+        };
+
+        window.cellHover = (taskId, day) => {
+            const cells = document.querySelectorAll('.gantt-cell');
+            cells.forEach(c => c.classList.remove('cell-preview'));
+            
+            if (!taskId || !day) return;
+
+            let startDay = day;
+            const task = state.settings.tasks.find(t => t.id === taskId);
+            const baseDays = parseInt(task.baseDays);
+
+            if (dragInfo.active && dragInfo.taskId === taskId) {
+                startDay = day - dragInfo.offset;
+                if (startDay < 1) startDay = 1;
+                if (startDay + baseDays - 1 > 30) startDay = 30 - baseDays + 1;
+                state.schedule[taskId] = { start: startDay, end: startDay + baseDays - 1 };
+                renderGanttOnly();
+            } else {
+                for (let i = 0; i < baseDays; i++) {
+                    const d = startDay + i;
+                    if (d > 30) break;
+                    const cell = document.querySelector(`[data-task="${taskId}"][data-day="${d}"]`);
+                    if (cell && !cell.classList.contains('cell-selected')) {
+                        cell.classList.add('cell-preview');
+                    }
+                }
+            }
+        };
+
+        // --- Admin Task Drag & Drop ---
+        window.onTaskDragStart = (e, index) => {
+            e.dataTransfer.setData('text/plain', index);
+            e.currentTarget.classList.add('dragging');
+        };
+
+        window.onTaskDragEnd = (e) => {
+            e.currentTarget.classList.remove('dragging');
+        };
+
+        window.onTaskDragOver = (e) => {
+            e.preventDefault();
+        };
+
+        window.onTaskDrop = (e, targetIndex) => {
+            e.preventDefault();
+            const sourceIndex = parseInt(e.dataTransfer.getData('text/plain'));
+            if (sourceIndex === targetIndex) return;
+
+            const tasks = [...state.settings.tasks];
+            const [removed] = tasks.splice(sourceIndex, 1);
+            tasks.splice(targetIndex, 0, removed);
+            state.settings.tasks = tasks;
+            render();
+        };
+
+        // --- Selective Rendering ---
+        function render() {
+            const main = document.getElementById('main-content');
+            if (state.view === 'landing') main.innerHTML = renderLanding();
+            else if (state.view === 'admin') main.innerHTML = renderAdmin();
+            else if (state.view === 'student') main.innerHTML = renderStudent();
+            lucide.createIcons();
+        }
+
+        function renderStatus() {
+            const container = document.getElementById('status-layer');
+            container.innerHTML = state.statusMessage ? `
+                <div class="fixed top-4 right-4 z-50 animate-fade-in">
+                    <div class="bg-slate-900 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3">
+                        <i data-lucide="info" class="text-blue-400 w-5 h-5 flex-shrink-0"></i>
+                        <span class="font-medium text-sm leading-relaxed">${state.statusMessage}</span>
+                    </div>
+                </div>` : '';
+            lucide.createIcons();
+        }
+
+        function renderPanel() {
+            if (state.view === 'student') {
+                const panel = document.getElementById('student-sidebar');
+                if (panel) panel.innerHTML = renderStudentSidebar();
+            }
+        }
+
+        function renderGanttOnly() {
+            const body = document.getElementById('gantt-body');
+            if (body) body.innerHTML = renderGanttRows();
+        }
+
+        function renderLanding() {
+            return `
+            <div class="flex flex-col items-center justify-center min-h-screen gap-8 p-6 animate-fade-in">
+                ${!isConfigured ? `<div class="bg-amber-50 border border-amber-200 p-4 rounded-xl text-amber-800 text-sm flex items-center gap-2 max-w-2xl"><i data-lucide="alert-triangle"></i><p>Firebaseが未設定です。config.jsを確認してください。</p></div>` : ''}
+                <div class="text-center space-y-2">
+                    <h1 class="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">施工管理シミュレーター</h1>
+                    <p class="text-slate-500 font-medium tracking-wide uppercase text-xs">Internship Support Tool</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-3xl">
+                    <button onclick="changeView('admin')" class="bg-white p-10 rounded-3xl shadow-sm border border-slate-200 hover:border-blue-500 hover:shadow-xl transition-all text-center flex flex-col items-center group">
+                        <div class="bg-blue-100 w-16 h-16 rounded-2xl flex items-center justify-center mb-8 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                            <i data-lucide="settings"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold mb-2">管理者モード</h3>
+                        <p class="text-slate-500 text-sm leading-relaxed">課題の作成や設定、受講用IDの発行を行います。</p>
+                    </button>
+                    <div class="bg-white p-10 rounded-3xl shadow-sm border border-slate-200 flex flex-col justify-between items-center text-center">
+                        <div class="w-full">
+                            <div class="bg-emerald-100 w-16 h-16 rounded-2xl flex items-center justify-center mb-8 mx-auto text-emerald-600">
+                                <i data-lucide="users"></i>
+                            </div>
+                            <h3 class="text-2xl font-bold mb-2">受講者モード</h3>
+                            <p class="text-slate-500 text-sm mb-8">共有された6桁 of IDを入力して開始します。</p>
+                        </div>
+                        <div class="flex gap-2 justify-center w-full max-w-xs">
+                            <input id="joinInput" type="text" placeholder="ID" class="w-40 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-4 text-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono tracking-widest uppercase text-center">
+                            <button onclick="handleJoin()" class="bg-emerald-600 text-white px-6 py-4 rounded-2xl font-black hover:bg-emerald-700 transition">参加</button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        function renderAdmin() {
+            return `
+            <div class="max-w-5xl mx-auto p-6 space-y-8 animate-fade-in pb-20">
+                <div class="flex items-center justify-between border-b border-slate-200 pb-8">
+                    <button onclick="changeView('landing')" class="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition font-bold"><i data-lucide="arrow-left"></i>戻る</button>
+                    <h2 class="text-3xl font-black text-slate-900">管理者ツール</h2>
+                    <button onclick="saveSettings()" class="bg-blue-600 text-white px-10 py-4 rounded-2xl font-bold flex items-center gap-2 hover:bg-blue-700 transition shadow-xl ${!isConfigured ? 'opacity-50' : ''}"><i data-lucide="save"></i>保存・ID発行</button>
+                </div>
+                ${state.workshopId ? `<div class="bg-blue-50 border border-blue-200 p-8 rounded-3xl flex items-center justify-between shadow-sm animate-fade-in"><div><p class="text-xs text-blue-600 font-black mb-1 tracking-widest uppercase">共有用ID</p><p class="text-4xl font-mono font-black text-blue-900 tracking-widest">${state.workshopId}</p></div><button onclick="copyId()" class="bg-white border border-blue-200 p-5 rounded-2xl text-blue-600 hover:bg-blue-50 transition"><i data-lucide="copy"></i></button></div>` : ''}
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                    <div class="space-y-6">
+                        <h3 class="text-xl font-black text-slate-700 flex items-center gap-2"><i data-lucide="info"></i>基本設定</h3>
+                        <div class="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
+                            <div><label class="block text-xs font-black text-slate-400 mb-3 uppercase tracking-widest">目標工期 (日)</label><input type="number" value="${state.settings.goalDays}" onchange="updateGoal(this.value)" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 font-black text-3xl text-blue-600 focus:outline-none"></div>
+                        </div>
+                    </div>
+                    <div class="space-y-6">
+                        <div class="flex items-center justify-between"><h3 class="text-xl font-black text-slate-700 flex items-center gap-2"><i data-lucide="list"></i>タスク構成</h3><button onclick="addTask()" class="bg-slate-100 px-4 py-2 rounded-xl text-xs font-black hover:bg-blue-50 transition">+ 追加</button></div>
+                        <div class="space-y-4">
+                            ${state.settings.tasks.map((t, index) => `
+                                <div 
+                                    class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-slate-400 transition-all cursor-default"
+                                    draggable="true"
+                                    ondragstart="onTaskDragStart(event, ${index})"
+                                    ondragover="onTaskDragOver(event)"
+                                    ondragend="onTaskDragEnd(event)"
+                                    ondrop="onTaskDrop(event, ${index})"
+                                >
+                                    <div class="text-slate-300 cursor-grab active:cursor-grabbing p-1 group-hover:text-slate-500">
+                                        <i data-lucide="grip-vertical"></i>
+                                    </div>
+                                    <div class="flex-1 space-y-1">
+                                        <input type="text" value="${t.name}" onchange="updateTaskField(${t.id}, 'name', this.value)" class="w-full text-sm font-bold border-none bg-transparent focus:ring-0 px-1" placeholder="作業名">
+                                        <input type="text" value="${t.condition}" onchange="updateTaskField(${t.id}, 'condition', this.value)" class="w-full text-[11px] text-slate-400 font-bold border-none bg-transparent focus:ring-0 px-1" placeholder="補足条件">
+                                    </div>
+                                    <div class="w-20 text-right">
+                                        <div class="flex items-center bg-slate-50 rounded-xl px-2">
+                                            <input type="number" value="${t.baseDays}" onchange="updateTaskField(${t.id}, 'baseDays', this.value)" class="w-full text-center font-black bg-transparent border-none focus:ring-0 text-sm py-2">
+                                            <span class="text-[10px] text-slate-300 font-bold mr-1">日</span>
+                                        </div>
+                                    </div>
+                                    <button onclick="removeTask(${t.id})" class="text-slate-300 hover:text-rose-500 transition-colors p-1"><i data-lucide="trash-2"></i></button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        function renderStudentSidebar() {
+            const entries = Object.values(state.schedule);
+            const ends = entries.map(s => s.end);
+            const starts = entries.map(s => s.start);
+            
+            // スパンカウント計算：最大終了日 - 最小開始日 + 1
+            const currentDay = entries.length > 0 ? (Math.max(...ends) - Math.min(...starts) + 1) : 0;
+            const isOk = currentDay <= state.settings.goalDays;
+            
+            return `
+                <!-- 目標ボックス -->
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm text-center animate-fade-in">
+                    <h3 class="text-[10px] font-black uppercase text-slate-400 mb-1 tracking-widest">目標</h3>
+                    <p class="text-2xl font-black text-blue-600 leading-tight">
+                        ${state.settings.goalDays}<span class="text-[10px] ml-0.5 font-bold uppercase tracking-tighter text-blue-600">日以内</span>
+                    </p>
+                </div>
+                <!-- 予定日数ボックス -->
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm text-center animate-fade-in">
+                    <p class="text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">予定日数</p>
+                    <p class="text-2xl font-black ${isOk ? 'text-emerald-600' : 'text-rose-600'} transition-colors leading-tight">
+                        ${currentDay}<span class="text-[10px] ml-0.5 font-bold uppercase tracking-tighter">日</span>
+                    </p>
+                </div>`;
+        }
+
+        function renderGanttRows() {
+            return state.settings.tasks.map(task => `
+                <tr class="group hover:bg-slate-50/50 transition-colors">
+                    <td class="p-4 border-b border-r bg-white transition-colors group-hover:bg-slate-50 task-name-cell">
+                        <p class="text-sm font-black text-slate-700 leading-snug">${task.name}</p>
+                        <p class="text-[11px] text-slate-400 font-bold mt-0.5 uppercase">${task.condition}</p>
+                    </td>
+                    <td class="p-4 border-b border-r text-center text-xs font-black text-slate-500 bg-slate-50/30 w-16">${task.baseDays}日</td>
+                    ${Array.from({length: 30}).map((_, i) => {
+                        const day = i + 1;
+                        const isSelected = state.schedule[task.id] && day >= state.schedule[task.id].start && day <= state.schedule[task.id].end;
+                        const cellClass = `gantt-cell border-b border-r h-14 ${isSelected ? 'cell-selected' : ''} ${(day % 5 === 0) ? 'border-r-slate-300' : 'border-r-slate-100'}`;
+                        return `<td 
+                            onmousedown="cellMouseDown(${task.id}, ${day})" 
+                            onmouseup="cellMouseUp(${task.id}, ${day})"
+                            onmouseenter="cellHover(${task.id}, ${day})" 
+                            onmouseleave="cellHover(null, null)" 
+                            data-task="${task.id}" data-day="${day}" 
+                            class="${cellClass}"
+                        >${isSelected && day === state.schedule[task.id].start ? `<div class="absolute inset-0 flex items-center justify-center opacity-70 pointer-events-none">${SVGS.check}</div>` : ''}</td>`;
+                    }).join('')}
+                </tr>`).join('');
+        }
+
+        function renderStudent() {
+            return `
+            <div class="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6 animate-fade-in" onmouseup="cellMouseUp(null, null)">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200">
+                    <div>
+                        <div class="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase mb-1">Session ID: ${state.workshopId || 'PREVIEW'}</div>
+                        <h2 class="text-3xl font-black text-slate-900 tracking-tighter">工程作成シミュレーション</h2>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <button onclick="changeView('landing')" class="p-3 text-slate-400 hover:text-slate-900 transition bg-slate-50 rounded-2xl shadow-sm border border-slate-100"><i data-lucide="arrow-left"></i></button>
+                        <button onclick="resetSched()" class="py-3 px-6 text-slate-400 hover:text-rose-600 transition bg-slate-50 rounded-2xl shadow-sm border border-slate-100 font-black text-xs uppercase tracking-widest">リセット</button>
+                    </div>
+                </div>
+                
+                <div class="flex flex-col lg:flex-row gap-6">
+                    <div id="student-sidebar" class="w-full lg:w-32 flex-shrink-0 space-y-4">
+                        ${renderStudentSidebar()}
+                    </div>
+                    
+                    <div class="flex-1 space-y-6 overflow-hidden">
+                        <div class="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
+                            <div class="overflow-x-auto">
+                                <table class="gantt-table">
+                                    <thead>
+                                        <tr class="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                            <th class="p-4 border-b border-r text-left">作業項目</th>
+                                            <th class="p-4 border-b border-r w-16 text-center">所要</th>
+                                            ${Array.from({length: 30}).map((_, i) => `<th class="p-1 border-b text-center min-w-[34px] ${(i+1)%5 === 0 ? 'bg-slate-100 text-slate-600 font-black' : ''}">${i+1}</th>`).join('')}
+                                        </tr>
+                                    </thead>
+                                    <tbody id="gantt-body">
+                                        ${renderGanttRows()}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-blue-600 p-6 rounded-[2rem] shadow-xl shadow-blue-100 text-white flex items-center gap-6 border border-blue-500 relative overflow-hidden group">
+                            <div class="bg-blue-400 p-3 rounded-2xl shadow-lg ring-4 ring-blue-500/50 flex-shrink-0">${SVGS.zap}</div>
+                            <div class="relative z-10">
+                                <h4 class="font-black uppercase tracking-[0.2em] text-[10px] mb-1 opacity-70 italic underline underline-offset-4 decoration-blue-400">Project Management Tips</h4>
+                                <p class="text-xs font-bold tracking-tight leading-relaxed">
+                                    水色のブロックをドラッグして移動できます。待機時間を活用した「並行作業」を組み込み、工期短縮のパズルを解きましょう。
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        window.onload = () => { 
+            initAuth(); 
+            render(); 
+        };
+    </script>
+</body>
+</html>

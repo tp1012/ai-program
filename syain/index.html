@@ -1,0 +1,640 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>先輩社員紹介</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+      background-color: #f5f7fa;
+      color: #333;
+    }
+
+    header {
+      background: linear-gradient(135deg, #1a3a6b, #2e6db4);
+      color: white;
+      text-align: center;
+      padding: 48px 24px;
+    }
+
+    header h1 {
+      font-size: 2rem;
+      font-weight: bold;
+      letter-spacing: 0.1em;
+      margin-bottom: 8px;
+    }
+
+    header p {
+      font-size: 1rem;
+      opacity: 0.85;
+      letter-spacing: 0.05em;
+    }
+
+    /* フィルターバー */
+    .filter-bar {
+      background: white;
+      border-bottom: 1px solid #e0e6f0;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+
+    .filter-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .filter-btn {
+      padding: 8px 18px;
+      border-radius: 20px;
+      border: 2px solid #2e6db4;
+      background: white;
+      color: #2e6db4;
+      font-size: 0.85rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, transform 0.1s;
+      font-family: inherit;
+      letter-spacing: 0.03em;
+    }
+
+    .filter-btn:hover {
+      background: #e8f0fb;
+    }
+
+    .filter-btn.active {
+      background: #2e6db4;
+      color: white;
+    }
+
+    .filter-count {
+      font-size: 0.85rem;
+      color: #777;
+      white-space: nowrap;
+    }
+
+    .filter-count span {
+      font-weight: bold;
+      color: #2e6db4;
+    }
+
+    /* メインコンテンツ */
+    main {
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 40px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      overflow: hidden;
+      display: flex;
+      flex-direction: row;
+      transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.14);
+    }
+
+    .card.reverse {
+      flex-direction: row-reverse;
+    }
+
+    .card.hidden {
+      display: none;
+    }
+
+    .card-image {
+      width: 260px;
+      flex-shrink: 0;
+      overflow: hidden;
+      background-color: #d0dcea;
+    }
+
+    .card-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .card-body {
+      padding: 32px 36px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 14px;
+      flex: 1;
+    }
+
+    .card-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: bold;
+      letter-spacing: 0.03em;
+    }
+
+    .badge-school {
+      background-color: #e8f5e9;
+      color: #2e7d32;
+      border: 1px solid #a5d6a7;
+    }
+
+    .badge-dept {
+      background-color: #e8f0fb;
+      color: #1a3a6b;
+      border: 1px solid #b3c8ef;
+    }
+
+    .badge-job {
+      background-color: #f3f0fb;
+      color: #4a3a7a;
+      border: 1px solid #c9bfef;
+    }
+
+    .badge-grad {
+      background-color: #f0f0f0;
+      color: #555;
+      border: 1px solid #ddd;
+    }
+
+    .card-divider {
+      width: 40px;
+      height: 3px;
+      background: linear-gradient(90deg, #2e6db4, #6ba8e5);
+      border-radius: 2px;
+    }
+
+    .card-comment {
+      font-size: 0.95rem;
+      line-height: 1.85;
+      color: #444;
+      white-space: pre-line;
+    }
+
+    /* ライトボックス */
+    .lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .lightbox.open {
+      display: flex;
+    }
+
+    .lightbox img {
+      width: min(90vw, 70vh);
+      height: min(90vw, 70vh);
+      object-fit: contain;
+      border-radius: 6px;
+      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    .lightbox-close {
+      position: absolute;
+      top: 16px;
+      right: 20px;
+      color: white;
+      font-size: 2rem;
+      line-height: 1;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 4px 8px;
+    }
+
+    @media (max-width: 650px) {
+      .card-image {
+        cursor: pointer;
+      }
+    }
+
+    /* 検索結果なし */
+    .no-results {
+      display: none;
+      text-align: center;
+      padding: 60px 24px;
+      color: #999;
+      font-size: 1rem;
+    }
+
+    footer {
+      text-align: center;
+      padding: 32px;
+      font-size: 0.8rem;
+      color: #999;
+    }
+
+    @media (max-width: 480px) {
+      .filter-buttons {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 4px;
+      }
+
+      .filter-btn {
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+    }
+
+    @media (hover: none) {
+      .card:hover {
+        transform: none;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      }
+    }
+
+    @media (max-width: 650px) {
+      header {
+        padding: 32px 16px;
+      }
+
+      header h1 {
+        font-size: 1.4rem;
+      }
+
+      .filter-bar {
+        padding: 12px 16px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+      }
+
+      .filter-buttons {
+        flex-wrap: wrap;
+      }
+
+      .filter-count {
+        text-align: right;
+        font-size: 0.8rem;
+      }
+
+      main {
+        margin: 24px auto;
+        padding: 0 16px;
+        gap: 24px;
+      }
+
+      .card,
+      .card.reverse {
+        flex-direction: column;
+      }
+
+      .card-image {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 4 / 3;
+      }
+
+      .card-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center top;
+      }
+
+      .card-body {
+        padding: 20px 16px;
+        gap: 12px;
+      }
+
+      .card-comment {
+        font-size: 0.9rem;
+        line-height: 1.8;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>先輩社員紹介</h1>
+    <p>先輩たちの仕事とリアルな声をご紹介します</p>
+  </header>
+
+  <div class="filter-bar">
+    <div class="filter-buttons">
+      <button class="filter-btn active" data-filter="all">すべて</button>
+      <button class="filter-btn" data-filter="テクノアカデミー郡山">テクノアカデミー郡山</button>
+      <button class="filter-btn" data-filter="清陵情報高校">清陵情報高校</button>
+      <button class="filter-btn" data-filter="平工業高校">平工業高校</button>
+      <button class="filter-btn" data-filter="郡山北工業高校">郡山北工業高校</button>
+    </div>
+    <div class="filter-count"><span id="count">12</span>件表示中</div>
+  </div>
+
+  <main id="card-list">
+
+    <article class="card" data-school="テクノアカデミー郡山">
+      <div class="card-image">
+        <img src="image/画像1.jpg" alt="先輩社員1" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div class="card-meta">
+          <span class="badge badge-school">テクノアカデミー郡山</span>
+          <span class="badge badge-dept">情報通信部</span>
+          <span class="badge badge-job">技術職</span>
+          <span class="badge badge-grad">H29卒</span>
+        </div>
+        <div class="card-divider"></div>
+        <p class="card-comment">既にお取引のあるお客様を訪問し、電話設備やカメラの更新・交換のご相談にお応えしています。数年前までは製品知識が足りていないことに不安がありましたが、現場経験や各種メーカー研修で知識を深めることができ、今では自信をもってお客様へ製品の提案ができています。</p>
+      </div>
+    </article>
+
+    <article class="card" data-school="テクノアカデミー郡山">
+      <div class="card-image">
+        <img src="image/画像2.jpg" alt="先輩社員2" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div class="card-meta">
+          <span class="badge badge-school">テクノアカデミー郡山</span>
+          <span class="badge badge-dept">プラント計装部</span>
+          <span class="badge badge-job">技術職</span>
+          <span class="badge badge-grad">H31卒</span>
+        </div>
+        <div class="card-divider"></div>
+        <p class="card-comment">浄水場などの水道設備、民間の工場において水質や水位、圧力などを測定する装置のメンテナンスを行っています。お取引のあるお客様の数が多く、県内市町村のあちこちの設備にニノテックが関わっています。</p>
+      </div>
+    </article>
+
+    <article class="card" data-school="テクノアカデミー郡山">
+      <div class="card-image">
+        <img src="image/画像3.jpg" alt="先輩社員3" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div class="card-meta">
+          <span class="badge badge-school">テクノアカデミー郡山</span>
+          <span class="badge badge-dept">情報通信部</span>
+          <span class="badge badge-job">技術職</span>
+          <span class="badge badge-grad">R4卒</span>
+        </div>
+        <div class="card-divider"></div>
+        <p class="card-comment">消防設備の点検、工事を行っています。消火器や誘導灯など、案外身近にある設備に関わっており、日々お客様の「もしも」に備えて仕事をしています。
+仕事で電気関係の知識などを使うので、電気工学などテクノアカデミー郡山で学んだことが生かされています。</p>
+      </div>
+    </article>
+
+    <article class="card" data-school="清陵情報高校">
+      <div class="card-image">
+        <img src="image/画像4.jpg" alt="先輩社員4" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div class="card-meta">
+          <span class="badge badge-school">清陵情報高校</span>
+          <span class="badge badge-dept">情報通信部</span>
+          <span class="badge badge-job">技術職</span>
+          <span class="badge badge-grad">R3卒</span>
+        </div>
+        <div class="card-divider"></div>
+        <p class="card-comment">弱電分野の設備工事を行っています。普段何気なく使っているネットワークやテレビの設備工事に携われていることにとてもやりがいを感じています。会社が資格取得支援制度でスキルアップのサポートをしてくれるので、モチベーションアップにつながっています。</p>
+      </div>
+    </article>
+
+    <article class="card" data-school="平工業高校">
+      <div class="card-image">
+        <img src="image/画像5.jpg" alt="先輩社員5" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div class="card-meta">
+          <span class="badge badge-school">平工業高校</span>
+          <span class="badge badge-dept">情報通信部</span>
+          <span class="badge badge-job">技術職</span>
+          <span class="badge badge-grad">R4卒</span>
+        </div>
+        <div class="card-divider"></div>
+        <p class="card-comment">消火器や自動火災報知設備などの消防設備が実際に使用される際、安全に避難・消火活動が行えるよう定期点検業務を行っています。日常的に電気関係の知識を扱うことが多く、平工業高校で学んだことが実践で活きています。</p>
+      </div>
+    </article>
+
+    <article class="card" data-school="平工業高校">
+      <div class="card-image">
+        <img src="image/画像6.jpg" alt="先輩社員6" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div class="card-meta">
+          <span class="badge badge-school">平工業高校</span>
+          <span class="badge badge-dept">情報通信部</span>
+          <span class="badge badge-job">技術職</span>
+          <span class="badge badge-grad">R6卒</span>
+        </div>
+        <div class="card-divider"></div>
+        <p class="card-comment">消火器などの消防設備の点検をした際、お客様に出す報告書や見積書の作成、電話対応や荷物の検品作業などの事務作業を行っています。報告書や見積書を作成する際も専門的な知識が必要ですが、平工業高校で学んできたことが多く、素早く内容を理解することができています。</p>
+      </div>
+    </article>
+
+    <article class="card" data-school="平工業高校">
+      <div class="card-image">
+        <img src="image/画像7.jpg" alt="先輩社員7" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div class="card-meta">
+          <span class="badge badge-school">平工業高校</span>
+          <span class="badge badge-dept">プラント計装部</span>
+          <span class="badge badge-job">技術職</span>
+          <span class="badge badge-grad">R7卒</span>
+        </div>
+        <div class="card-divider"></div>
+        <p class="card-comment">工場や水道施設などのさまざまな配管に取り付けられている圧力計、水位計、流量計などの点検業務を行っています。仕事のほとんどがこれまで知らなかった分野で、覚えることもたくさんありますが、その中で平工業高校で学んだ知識が活かされる場面もあります。自分の持っている知識と新しい知識が繋がっていくのがとても楽しく、やりがいを感じています。</p>
+      </div>
+    </article>
+
+    <article class="card" data-school="清陵情報高校">
+      <div class="card-image">
+        <img src="image/画像8.jpg" alt="先輩社員8" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div class="card-meta">
+          <span class="badge badge-school">清陵情報高校</span>
+          <span class="badge badge-dept">制御部</span>
+          <span class="badge badge-job">営業職</span>
+          <span class="badge badge-grad">R1卒</span>
+        </div>
+        <div class="card-divider"></div>
+        <p class="card-comment">工場の生産ラインを自動化するためのFA機器の提案と販売を担当しています。初めて聞く商品名や用語には苦労することもありますが、クイックレスポンスを心がけて日々奮闘しています。ニノテックは明るく親しみやすい職場環境が魅力で、疑問に思ったことはすぐに相談できる環境が整っています。</p>
+      </div>
+    </article>
+
+    <article class="card" data-school="清陵情報高校">
+      <div class="card-image">
+        <img src="image/画像9.jpg" alt="先輩社員9" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div class="card-meta">
+          <span class="badge badge-school">清陵情報高校</span>
+          <span class="badge badge-dept">情報通信部</span>
+          <span class="badge badge-job">技術職</span>
+          <span class="badge badge-grad">R5卒</span>
+        </div>
+        <div class="card-divider"></div>
+        <p class="card-comment">工場やオフィスのネットワーク環境の構築や、電話設備の設置工事を行っています。仕事を行う上で電気工事の資格が必要になるので、高校で学んだ電気関係の知識が仕事に生かされています。</p>
+      </div>
+    </article>
+
+    <article class="card" data-school="清陵情報高校">
+      <div class="card-image">
+        <img src="image/画像10.jpg" alt="先輩社員10" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div class="card-meta">
+          <span class="badge badge-school">清陵情報高校</span>
+          <span class="badge badge-dept">情報通信部</span>
+          <span class="badge badge-job">営業事務職</span>
+          <span class="badge badge-grad">R5卒</span>
+        </div>
+        <div class="card-divider"></div>
+        <p class="card-comment">情報通信部で営業事務をしています。主な仕事は見積依頼の処理や仕入れ先への問い合わせなど多岐に渡りますが、日々迅速かつ正確な業務を心掛けています。ニノテックは産休や育休が取りやすく、復帰後も働きやすい環境が整っていますので、女性にとっても働きやすい会社だと思います。既婚者の女性の先輩もたくさん活躍されています。</p>
+      </div>
+    </article>
+
+    <article class="card" data-school="郡山北工業高校">
+      <div class="card-image">
+        <img src="image/画像11.JPG" alt="先輩社員11" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div class="card-meta">
+          <span class="badge badge-school">郡山北工業高校</span>
+          <span class="badge badge-dept">情報通信部</span>
+          <span class="badge badge-job">技術職</span>
+          <span class="badge badge-grad">R5卒</span>
+        </div>
+        <div class="card-divider"></div>
+        <p class="card-comment">工場やオフィス等幅広い施設の消防設備の点検・施工メンテナンスを行っています。万が一火災が起きても設備に不備なく避難・消火活動を行えるよう日々の業務に取り組み、お客様には安心していられる環境作りに迅速かつ正確な対応を行っています。
+消防設備の専門用語や設備の種類、仕組みについて学ぶことが多く覚えることに苦労することがありますが日々の点検・工事を通して理解できるように分かりやすく教えてくれる先輩方がいるためとても心強いです。高校で学んだ電気関係の知識を仕事で実践して活かせています。</p>
+      </div>
+    </article>
+
+    <article class="card" data-school="郡山北工業高校">
+      <div class="card-image">
+        <img src="image/画像12.jpg" alt="先輩社員12" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div class="card-meta">
+          <span class="badge badge-school">郡山北工業高校</span>
+          <span class="badge badge-dept">情報通信部</span>
+          <span class="badge badge-job">技術職</span>
+          <span class="badge badge-grad">R7卒</span>
+        </div>
+        <div class="card-divider"></div>
+        <p class="card-comment">消火器や誘導灯をはじめ、さまざまな消防設備の点検・確認業務を日々行っています。覚えることが多く、最初はわからないことや戸惑う場面もありますが、一つひとつ丁寧に取り組むことで着実にスキルが身についていく実感があります。ニノテックには気さくで親しみやすい先輩や同僚が多く、困ったときや疑問が生じたときでも気軽に声をかけやすい雰囲気があります。「こんなこと聞いていいのかな」と躊躇することなく相談できる環境が整っているので、わからないことをそのままにせず、その場でしっかり解決できるのが大きな安心感につながっています。</p>
+      </div>
+    </article>
+
+    <p class="no-results" id="no-results">該当する社員が見つかりませんでした。</p>
+
+  </main>
+
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true">
+    <button class="lightbox-close" id="lightbox-close" aria-label="閉じる">&times;</button>
+    <img id="lightbox-img" src="" alt="">
+  </div>
+
+  <footer>
+    &copy; 先輩社員紹介ページ
+  </footer>
+
+  <script>
+    const buttons = document.querySelectorAll('.filter-btn');
+    const cards = document.querySelectorAll('.card');
+    const countEl = document.getElementById('count');
+    const noResults = document.getElementById('no-results');
+
+    function applyFilter(filter) {
+      let visible = 0;
+      cards.forEach(card => {
+        if (filter === 'all' || card.dataset.school === filter) {
+          card.classList.remove('hidden');
+          card.classList.toggle('reverse', visible % 2 === 1);
+          visible++;
+        } else {
+          card.classList.add('hidden');
+        }
+      });
+      countEl.textContent = visible;
+      noResults.style.display = visible === 0 ? 'block' : 'none';
+    }
+
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        buttons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        applyFilter(btn.dataset.filter);
+      });
+    });
+
+    applyFilter('all');
+
+    // ライトボックス（スマホのみ）
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImg = document.getElementById('lightbox-img');
+
+    function openLightbox(src, alt) {
+      lightboxImg.src = src;
+      lightboxImg.alt = alt;
+      lightbox.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeLightbox() {
+      lightbox.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    document.querySelectorAll('.card-image').forEach(wrapper => {
+      wrapper.addEventListener('click', () => {
+        if (window.innerWidth <= 650) {
+          const img = wrapper.querySelector('img');
+          openLightbox(img.src, img.alt);
+        }
+      });
+    });
+
+    document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+    lightbox.addEventListener('click', e => {
+      if (e.target === lightbox) closeLightbox();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeLightbox();
+    });
+  </script>
+
+</body>
+</html>

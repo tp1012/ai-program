@@ -1,0 +1,1369 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WiFi ヒートマップ シミュレーター</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F1EFE8;color:#2C2C2A}
+:root{
+  --bp:#fff;--bs:#F8F7F2;--bt:#F1EFE8;
+  --tp:#2C2C2A;--ts:#5F5E5A;
+  --bl:rgba(0,0,0,.12);--bm:rgba(0,0,0,.22);
+  --b50:#E6F1FB;--b4:#378ADD;--b6:#185FA5;
+  --rm:8px;--rl:12px
+}
+@media(prefers-color-scheme:dark){
+  :root{--bp:#1e1e1c;--bs:#252522;--bt:#2c2c2a;--tp:#F1EFE8;--ts:#888780;--bl:rgba(255,255,255,.1);--bm:rgba(255,255,255,.2);--b50:#0C2A45;--b4:#378ADD;--b6:#85B7EB}
+  body{background:#1a1a18}
+}
+.app{display:flex;height:100vh;min-height:600px}
+.sb{width:260px;min-width:260px;border-right:.5px solid var(--bl);display:flex;flex-direction:column;background:var(--bs);overflow-y:auto}
+.sb-hd{padding:16px;border-bottom:.5px solid var(--bl)}
+.sb-hd h1{font-size:13px;font-weight:600;color:var(--tp);letter-spacing:.06em;text-transform:uppercase}
+.sb-hd p{font-size:11px;color:var(--ts);margin-top:2px}
+.ss{padding:12px;border-bottom:.5px solid var(--bl)}
+.sl{font-size:10px;color:var(--ts);display:block;margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.07em}
+.dg{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.db{padding:8px 4px;border:.5px solid var(--bl);border-radius:var(--rm);background:var(--bp);cursor:pointer;text-align:center;transition:all .15s}
+.db:hover{border-color:var(--bm)}
+.db.active{border-color:var(--b4);background:var(--b50)}
+.db .ic{font-size:20px;display:block;margin-bottom:2px}
+.db .nm{font-size:10px;color:var(--ts);line-height:1.2;font-weight:500}
+.db .fq{font-size:9px;color:var(--ts);opacity:.75}
+.pr{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.pr-t{display:flex;justify-content:space-between;align-items:center}
+.pr label{font-size:11px;color:var(--ts)}
+.pr input[type=range]{width:100%;accent-color:var(--b4)}
+.pr .v{font-size:11px;font-weight:600;color:var(--tp)}
+.ws{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--rm);background:var(--bt);border:.5px solid var(--bl);font-size:11px;color:var(--ts);margin-bottom:10px}
+.wd{width:7px;height:7px;border-radius:50%;background:#B4B2A9;flex-shrink:0}
+.ws.active .wd{background:#1D9E75}
+.ws.active{color:var(--tp)}
+.ws.computing .wd{background:#EF9F27;animation:blink .7s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.sr{display:flex;flex-direction:column;gap:3px;margin-bottom:10px}
+.sr .rt{display:flex;justify-content:space-between;font-size:11px}
+.sr .rt .lb{color:var(--ts)}
+.sr .rt .vl{font-weight:600;color:var(--tp)}
+.sr input[type=range]{width:100%;accent-color:#EF9F27}
+.lgd{padding:10px 12px;border-bottom:.5px solid var(--bl)}
+.lgd-b{height:10px;border-radius:5px;background:linear-gradient(to right,#1a1aff,#00aaff,#00ff88,#ffff00,#ff8800,#ff0000);margin:6px 0 4px}
+.lgd-l{display:flex;justify-content:space-between;font-size:9px;color:var(--ts)}
+.pl{padding:10px 12px;flex:1}
+.pi{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;margin-bottom:3px;font-size:11px;cursor:pointer;border:.5px solid transparent;transition:all .1s}
+.pi:hover{background:var(--bt)}
+.pi.sel{background:var(--b50);border-color:var(--b4)}
+.pi .di{font-size:14px}
+.pi .dn{color:var(--tp);flex:1;font-weight:500}
+.pi .dl{color:var(--ts);font-size:12px;padding:2px 4px;border-radius:4px}
+.pi .dl:hover{color:#E24B4A;background:#FCEBEB}
+.ca{flex:1;display:flex;flex-direction:column;min-width:0}
+.tb{padding:8px 12px;border-bottom:.5px solid var(--bl);display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:var(--bs)}
+.btn{padding:5px 12px;font-size:12px;border:.5px solid var(--bl);border-radius:var(--rm);background:var(--bp);cursor:pointer;color:var(--tp);transition:all .15s;font-family:inherit;white-space:nowrap}
+.btn:hover{background:var(--bt);border-color:var(--bm)}
+.btn.active{background:var(--b50);border-color:var(--b4);color:var(--b6)}
+.btn.danger{border-color:#F09595;color:#A32D2D}
+.btn.danger:hover{background:#FCEBEB}
+/* ── ファイルアップロードボタン ── */
+.upload-btn-wrap{position:relative;overflow:hidden;display:inline-block}
+.upload-btn-wrap input[type=file]{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;font-size:0}
+.mi{font-size:11px;color:var(--ts);margin-left:auto}
+.tb-sep{width:.5px;height:20px;background:var(--bl);flex-shrink:0;margin:0 2px}
+.cw{flex:1;position:relative;overflow:hidden;background:var(--bt)}
+canvas{position:absolute;top:0;left:0}
+#dc{cursor:crosshair}
+#dc.mm{cursor:default}
+/* ── ドロップゾーン（図面なし時） ── */
+.dz{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.dz.hidden{display:none}
+.dz-box{border:1.5px dashed var(--bm);border-radius:var(--rl);padding:40px 48px;text-align:center;pointer-events:none;background:var(--bp)}
+.dz-ico{font-size:36px;margin-bottom:10px}
+.dz-ttl{font-size:15px;font-weight:600;color:var(--tp);margin-bottom:6px}
+.dz-sub{font-size:12px;color:var(--ts);line-height:1.5}
+.tt{position:absolute;background:var(--bp);border:.5px solid var(--bm);border-radius:8px;padding:7px 11px;font-size:11px;pointer-events:none;display:none;z-index:10;min-width:150px}
+.tt.show{display:block}
+.tt-nm{font-weight:600;color:var(--tp);margin-bottom:2px}
+.tt-vl{color:var(--ts)}
+.stb{display:flex;border-top:.5px solid var(--bl);background:var(--bs);flex-wrap:wrap}
+.st{font-size:11px;color:var(--ts);padding:7px 12px;border-right:.5px solid var(--bl);white-space:nowrap}
+.st span{font-weight:600;color:var(--tp)}
+.ep{font-size:11px;color:var(--ts);text-align:center;padding:16px 8px;opacity:.7}
+/* 最適化パネル */
+.opt-panel{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:var(--bp);border:.5px solid var(--bm);border-radius:var(--rl);padding:16px 20px;z-index:35;min-width:300px;box-shadow:0 4px 20px rgba(0,0,0,.15)}
+.opt-panel.hidden{display:none}
+.opt-panel h3{font-size:13px;font-weight:600;color:var(--tp);margin-bottom:12px}
+.opt-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;font-size:12px}
+.opt-row label{color:var(--ts);width:110px;flex-shrink:0}
+.opt-row input[type=range]{flex:1;accent-color:var(--b4)}
+.opt-row .ov{font-weight:600;color:var(--tp);width:40px;text-align:right}
+.opt-row select{flex:1;padding:4px 6px;border:.5px solid var(--bm);border-radius:var(--rm);font-size:12px;font-family:inherit;background:var(--bp);color:var(--tp)}
+.opt-btns{display:flex;gap:8px;margin-top:14px}
+.opt-btns button{flex:1;padding:7px;font-size:12px;border:.5px solid var(--bl);border-radius:var(--rm);cursor:pointer;font-family:inherit;font-weight:500;background:var(--bp);color:var(--tp)}
+.opt-btns button.go{background:var(--b50);border-color:var(--b4);color:var(--b6)}
+.opt-btns button.apply{background:#EAF3DE;border-color:#639922;color:#27500A}
+.opt-btns button.danger{border-color:#F09595;color:#A32D2D}
+.opt-progress{font-size:11px;color:var(--ts);margin-top:10px;text-align:center;min-height:16px}
+/* 提案デバイスの点滅 */
+@keyframes optBlink{0%,100%{opacity:1}50%{opacity:.3}}
+.opt-blink{animation:optBlink 1s infinite}
+/* スケール設定 */
+.scale-overlay{position:absolute;inset:0;z-index:30;cursor:crosshair}
+.scale-overlay.hidden{display:none}
+.scale-hint{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:var(--bp);border:.5px solid var(--bm);border-radius:var(--rm);padding:8px 16px;font-size:12px;font-weight:600;color:var(--tp);white-space:nowrap;pointer-events:none}
+.scale-input-box{position:absolute;background:var(--bp);border:.5px solid var(--bm);border-radius:var(--rl);padding:14px 16px;z-index:31;min-width:220px;box-shadow:0 4px 16px rgba(0,0,0,.12)}
+.scale-input-box.hidden{display:none}
+.scale-input-box p{font-size:12px;color:var(--tp);margin-bottom:10px;font-weight:500}
+.scale-input-box .row{display:flex;gap:8px;align-items:center}
+.scale-input-box input[type=number]{flex:1;padding:5px 8px;border:.5px solid var(--bm);border-radius:var(--rm);font-size:13px;font-family:inherit;background:var(--bp);color:var(--tp)}
+.scale-input-box .unit{font-size:12px;color:var(--ts)}
+.scale-input-box .btns{display:flex;gap:6px;margin-top:10px}
+.scale-input-box .btns button{flex:1;padding:5px;font-size:12px;border:.5px solid var(--bl);border-radius:var(--rm);cursor:pointer;font-family:inherit;background:var(--bp);color:var(--tp)}
+.scale-input-box .btns button.ok{background:var(--b50);border-color:var(--b4);color:var(--b6);font-weight:600}
+.scale-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;padding:2px 8px;border-radius:10px;background:var(--b50);color:var(--b6);border:.5px solid var(--b4);margin-left:6px}
+#scaleCanvas{position:absolute;top:0;left:0;pointer-events:none;z-index:29}
+#ic{position:absolute;top:0;left:0;pointer-events:none;z-index:28}
+#polyCanvas{position:absolute;top:0;left:0;pointer-events:none;z-index:27}
+.poly-overlay{position:absolute;inset:0;z-index:30;cursor:crosshair}
+.poly-overlay.hidden{display:none}
+.poly-hint{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:var(--bp);border:.5px solid var(--bm);border-radius:var(--rm);padding:8px 16px;font-size:12px;font-weight:600;color:var(--tp);white-space:nowrap;pointer-events:none}
+.poly-toolbar{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:31;pointer-events:all}
+.poly-toolbar.hidden{display:none}
+.poly-toolbar button{padding:6px 14px;font-size:12px;border:.5px solid var(--bm);border-radius:var(--rm);cursor:pointer;font-family:inherit;background:var(--bp);color:var(--tp);font-weight:500}
+.poly-toolbar button.ok{background:var(--b50);border-color:var(--b4);color:var(--b6)}
+.poly-toolbar button.danger{border-color:#F09595;color:#A32D2D}
+/* デバイス凡例パネル */
+.dev-legend{position:absolute;top:48px;right:12px;width:300px;background:var(--bp);border:.5px solid var(--bm);border-radius:var(--rl);z-index:20;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.12);user-select:none}
+.dev-legend.hidden{display:none}
+.dl-hd{padding:10px 14px;border-bottom:.5px solid var(--bl);display:flex;justify-content:space-between;align-items:center;cursor:grab}.dl-hd.dragging{cursor:grabbing}
+.dl-hd span{font-size:12px;font-weight:600;color:var(--tp)}
+.dl-hd button{font-size:14px;background:none;border:none;cursor:pointer;color:var(--ts);line-height:1;padding:0 2px}
+.dl-hd button:hover{color:var(--tp)}
+.dl-body{padding:8px 0}
+.dl-row{display:flex;align-items:flex-start;gap:10px;padding:7px 14px;border-bottom:.5px solid var(--bl)}
+.dl-row:last-child{border-bottom:none}
+.dl-icon{font-size:22px;flex-shrink:0;width:28px;text-align:center}
+.dl-info{flex:1;min-width:0}
+.dl-name{font-size:12px;font-weight:600;color:var(--tp);margin-bottom:3px}
+.dl-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px}
+.dl-tag{font-size:9px;padding:2px 6px;border-radius:10px;font-weight:500;white-space:nowrap}
+.dl-desc{font-size:10px;color:var(--ts);line-height:1.5}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sb">
+    <div class="sb-hd">
+      <h1>ワイヤレス設計</h1>
+      <p>WiFi ヒートマップ シミュレーター</p>
+    </div>
+    <div class="ss">
+      <span class="sl">デバイスタイプ</span>
+      <div class="dg" id="deviceGrid"></div>
+    </div>
+    <div class="ss">
+      <span class="sl">出力設定</span>
+      <div class="pr">
+        <div class="pr-t"><label>送信出力</label><span class="v" id="txPV">20dBm</span></div>
+        <input type="range" id="txP" min="10" max="30" value="20" step="1">
+      </div>
+      <div class="pr">
+        <div class="pr-t"><label>周波数</label><span class="v" id="fqV">5GHz</span></div>
+        <input type="range" id="fqS" min="0" max="1" value="1" step="1">
+      </div>
+    </div>
+    <div class="ss">
+      <span class="sl">壁判定</span>
+      <div class="ws" id="wallSt"><div class="wd"></div><span id="wallStTx">図面未読み込み</span></div>
+      <div class="sr">
+        <div class="rt"><span class="lb">判定しきい値</span><span class="vl" id="wtV">80</span></div>
+        <input type="range" id="wt" min="20" max="220" value="80" step="5">
+      </div>
+      <div class="sr">
+        <div class="rt"><span class="lb">壁1枚あたりの減衰</span><span class="vl" id="waV">12dB</span></div>
+        <input type="range" id="wa" min="3" max="25" value="12" step="1">
+      </div>
+    </div>
+    <div class="lgd">
+      <span class="sl">信号強度 (dBm)</span>
+      <div class="lgd-b"></div>
+      <div class="lgd-l"><span>-90 (弱)</span><span>-70</span><span>-50</span><span>-30 (強)</span></div>
+    </div>
+    <div class="pl">
+      <span class="sl">配置済みデバイス</span>
+      <div id="placedList"><div class="ep">まだ配置されていません</div></div>
+    </div>
+  </div>
+
+  <div class="ca">
+    <div class="tb">
+      <label class="btn upload-btn-wrap">
+        📂 図面を選択
+        <input type="file" id="fileInput" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp">
+      </label>
+      <button class="btn" id="bPoly">✏️ エリアを指定</button>
+      <button class="btn" id="bScale">📏 スケール設定</button>
+      <div class="tb-sep"></div>
+      <button class="btn active" id="bPlace">＋ 配置モード</button>
+      <button class="btn" id="bMove">↔ 移動モード</button>
+      <div class="tb-sep"></div>
+      <button class="btn" id="bWall">🧱 壁を表示</button>
+      <button class="btn" id="bIndoor">🟩 エリアを表示</button>
+      <button class="btn active" id="bHeat">🌡 ヒートマップ</button>
+      <button class="btn" id="bLegend">📋 デバイス凡例</button>
+      <div class="tb-sep"></div>
+      <button class="btn danger" id="bDel">✕ 選択削除</button>
+      <button class="btn danger" id="bClear">🗑 デバイスを削除</button>
+      <div class="tb-sep"></div>
+      <button class="btn danger" id="bClearPoly">🗑 エリアを削除</button>
+      <div class="tb-sep"></div>
+      <button class="btn" id="bOpt">✨ 最適配置</button>
+      <div class="tb-sep"></div>
+      <button class="btn" id="bExport">💾 エクスポート</button>
+      <label class="btn upload-btn-wrap" id="bImportWrap">
+        📥 インポート
+        <input type="file" id="importInput" accept=".wifisim,.json">
+      </label>
+      <span class="mi" id="mInfo">デバイスを選択してクリックで配置</span>
+    </div>
+    <div class="cw" id="cw">
+      <canvas id="bc"></canvas>
+      <canvas id="hc"></canvas>
+      <canvas id="wc"></canvas>
+      <canvas id="ic"></canvas>
+      <canvas id="dc"></canvas>
+      <canvas id="polyCanvas"></canvas>
+      <canvas id="scaleCanvas"></canvas>
+      <div class="poly-overlay hidden" id="polyOverlay">
+        <div class="poly-hint" id="polyHint">クリックで頂点を追加 / ダブルクリックで確定</div>
+        <div class="poly-toolbar hidden" id="polyToolbar">
+          <button id="polyUndo">↩ 戻す</button>
+          <button class="danger" id="polyCancel">キャンセル</button>
+          <button class="ok" id="polyDone">✓ 確定</button>
+        </div>
+      </div>
+      <div class="scale-overlay hidden" id="scaleOverlay">
+        <div class="scale-hint" id="scaleHint">1点目をクリックしてください</div>
+      </div>
+      <div class="scale-input-box hidden" id="scaleInputBox">
+        <p>2点間の実際の距離を入力してください</p>
+        <div class="row">
+          <input type="number" id="scaleDist" min="0.1" step="0.1" value="10" placeholder="距離">
+          <span class="unit">m</span>
+        </div>
+        <div class="btns">
+          <button id="scaleCancelBtn">キャンセル</button>
+          <button class="ok" id="scaleOkBtn">確定</button>
+        </div>
+      </div>
+      <!-- ドロップゾーン表示（クリック不要・視覚案内のみ） -->
+      <div class="dz" id="dz">
+        <div class="dz-box">
+          <div class="dz-ico">🏢</div>
+          <div class="dz-ttl">上の「📂 図面を選択」から<br>平面図を読み込めます</div>
+          <div class="dz-sub">PNG / JPG 対応<br>壁を自動検出してヒートマップに反映</div>
+        </div>
+      </div>
+      <!-- 最適配置パネル -->
+      <div class="opt-panel hidden" id="optPanel">
+        <h3>✨ 最適配置の提案</h3>
+        <div class="opt-row">
+          <label>目標カバー率</label>
+          <input type="range" id="optTarget" min="50" max="100" value="90" step="5">
+          <span class="ov" id="optTargetV">90%</span>
+        </div>
+        <div class="opt-row">
+          <label>最大設置台数</label>
+          <input type="range" id="optMax" min="1" max="20" value="5" step="1">
+          <span class="ov" id="optMaxV">5台</span>
+        </div>
+        <div class="opt-row">
+          <label>デバイスタイプ</label>
+          <select id="optDevType"></select>
+        </div>
+        <div class="opt-btns">
+          <button class="go" id="optRun">▶ 計算開始</button>
+          <button class="apply hidden" id="optApply">✓ 採用</button>
+          <button class="danger" id="optClose">✕ 閉じる</button>
+        </div>
+        <div class="opt-progress" id="optProgress"></div>
+      </div>
+      <div class="tt" id="tt"><div class="tt-nm" id="ttN"></div><div class="tt-vl" id="ttV"></div></div>
+    </div>
+    <!-- デバイス凡例パネル -->
+    <div class="dev-legend hidden" id="devLegend">
+      <div class="dl-hd"><span>📋 デバイス一覧</span><button id="bLegendClose">✕</button></div>
+      <div class="dl-body" id="devLegendBody"></div>
+    </div>
+    <div class="stb">
+      <div class="st">デバイス数: <span id="sC">0</span></div>
+      <div class="st">検出壁ピクセル: <span id="sW">-</span></div>
+      <div class="st">カバレッジ: <span id="sCv">-</span></div>
+      <div class="st">平均信号: <span id="sA">-</span></div>
+      <div class="st">推奨範囲カバー率: <span id="sP">-</span></div>
+      <div class="st">スケール: <span id="sScale">未設定</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DEVICES=[
+  {id:'wifi6', name:'Wi-Fi 6',   freq:'2.4/5GHz',icon:'📡',color:'#378ADD',txBase:20,bands:[2.4,5],
+   range:'〜50m',speed:'最大9.6Gbps',tags:[{t:'高速',c:'#E6F1FB',tc:'#185FA5'},{t:'長距離',c:'#EAF3DE',tc:'#3B6D11'},{t:'IoT対応',c:'#F1EFE8',tc:'#5F5E5A'}],
+   desc:'最新規格。多数端末を同時接続でき、オフィス・工場のメイン無線LANに最適。'},
+  {id:'wifi5', name:'Wi-Fi 5',   freq:'5GHz',    icon:'📶',color:'#1D9E75',txBase:18,bands:[5],
+   range:'〜30m',speed:'最大3.5Gbps',tags:[{t:'高速',c:'#E6F1FB',tc:'#185FA5'},{t:'標準規格',c:'#EAF3DE',tc:'#3B6D11'}],
+   desc:'広く普及した規格。5GHz帯のみのため干渉が少なく安定。'},
+  {id:'bt',    name:'Bluetooth', freq:'2.4GHz',  icon:'🔵',color:'#7F77DD',txBase:10,bands:[2.4],
+   range:'〜10m',speed:'最大3Mbps',tags:[{t:'省電力',c:'#EEEDFE',tc:'#3C3489'},{t:'近距離',c:'#F1EFE8',tc:'#5F5E5A'}],
+   desc:'センサー・入力機器向け。消費電力が非常に低く、電池駆動のIoTデバイスに最適。'},
+  {id:'zigbee',name:'Zigbee',    freq:'2.4GHz',  icon:'🟡',color:'#EF9F27',txBase:8, bands:[2.4],
+   range:'〜20m',speed:'250kbps',tags:[{t:'省電力',c:'#FAEEDA',tc:'#633806'},{t:'メッシュ',c:'#EAF3DE',tc:'#3B6D11'}],
+   desc:'スマート照明・センサーネットワーク向け。メッシュ構成で広範囲をカバー可能。'},
+  {id:'zwave', name:'Z-Wave',    freq:'920MHz',  icon:'🟢',color:'#639922',txBase:14,bands:[0.9],
+   range:'〜30m',speed:'100kbps',tags:[{t:'低干渉',c:'#EAF3DE',tc:'#3B6D11'},{t:'壁に強い',c:'#FAEEDA',tc:'#633806'}],
+   desc:'920MHz帯で壁を通りやすく、スマートホームの制御系に多用される。'},
+  {id:'uwb',   name:'UWB',       freq:'6-9GHz',  icon:'🔴',color:'#D85A30',txBase:15,bands:[7],
+   range:'〜10m',speed:'27Mbps',tags:[{t:'高精度測位',c:'#FAECE7',tc:'#712B13'},{t:'cm精度',c:'#FCEBEB',tc:'#A32D2D'}],
+   desc:'超広帯域で数cmの測位精度を実現。資産管理・工場内ナビゲーションに最適。'},
+];
+const FL=['2.4GHz','5GHz'];
+const FV=[2.4,5];
+
+let selDev=DEVICES[0],placed=[],selP=null,mode='place';
+let heatOn=true,wallOn=false,indoorOn=false,floorImg=null;
+let dragging=null,dragOff={x:0,y:0};
+let cW=0,cH=0,txP=20,fqI=1;
+let wallMap=null,wmW=0,wmH=0,wThresh=80,wAtt=12;
+const WS=4;
+// スケール
+let mPerPx=null;
+// ポリゴン範囲指定
+let polyMode=false;
+// 最適化
+let optProposed=[];   // 提案デバイス（仮配置）
+let polyPts=[];       // 描画中の頂点 [{x,y},...]
+let polyRegions=[];   // 確定済みポリゴン群 [[{x,y},...],...]        // 1px = 何メートル（null=未設定）
+let scalePt1=null;      // 計測点1 {x,y}
+let scalePt2=null;      // 計測点2 {x,y}
+let scaleMode=false;    // スケール計測中フラグ
+
+const cw=document.getElementById('cw');
+const bc=document.getElementById('bc'),hc=document.getElementById('hc'),wc=document.getElementById('wc'),ic=document.getElementById('ic'),dc=document.getElementById('dc'),pc=document.getElementById('polyCanvas'),sc=document.getElementById('scaleCanvas');
+const bx=bc.getContext('2d'),hx=hc.getContext('2d'),wx=wc.getContext('2d'),ix=ic.getContext('2d'),dx=dc.getContext('2d'),px2=pc.getContext('2d'),sx=sc.getContext('2d');
+
+function resize(){
+  cW=cw.clientWidth;cH=cw.clientHeight;
+  [bc,hc,wc,ic,dc,pc,sc].forEach(c=>{c.width=cW;c.height=cH});
+  if(floorImg){remapCoords();buildWallMap();}else drawAll();
+}
+
+function drawAll(){drawBg();wallOn?drawWallOv():wx.clearRect(0,0,cW,cH);indoorOn?drawIndoorOv():ix.clearRect(0,0,cW,cH);heatOn?drawHeat():hx.clearRect(0,0,cW,cH);drawDevs();drawScaleBar();updateStats();}
+
+function fr(){
+  if(!floorImg)return{ox:0,oy:0,w:cW,h:cH,sc:1};
+  const sc=Math.min(cW/floorImg.width,cH/floorImg.height)*.95;
+  const w=floorImg.width*sc,h=floorImg.height*sc;
+  return{ox:(cW-w)/2,oy:(cH-h)/2,w,h,sc};
+}
+// キャンバス座標 → 図面相対座標 (0〜1)
+function toRel(x,y){
+  const{ox,oy,w,h}=fr();
+  return{rx:(x-ox)/w, ry:(y-oy)/h};
+}
+// 図面相対座標 → キャンバス座標
+function toPx(rx,ry){
+  const{ox,oy,w,h}=fr();
+  return{x:ox+rx*w, y:oy+ry*h};
+}
+// デバイス・ポリゴンのキャンバス座標をリサイズ後に再計算
+function remapCoords(){
+  placed.forEach(d=>{
+    if(d.rx!==undefined){const p=toPx(d.rx,d.ry);d.x=p.x;d.y=p.y;}
+  });
+  polyRegions.forEach(pts=>{
+    pts.forEach(p=>{
+      if(p.rx!==undefined){const q=toPx(p.rx,p.ry);p.x=q.x;p.y=q.y;}
+    });
+  });
+  if(scalePt1&&scalePt1.rx!==undefined){const p=toPx(scalePt1.rx,scalePt1.ry);scalePt1.x=p.x;scalePt1.y=p.y;}
+  if(scalePt2&&scalePt2.rx!==undefined){const p=toPx(scalePt2.rx,scalePt2.ry);scalePt2.x=p.x;scalePt2.y=p.y;}
+}
+
+function drawBg(){
+  bx.clearRect(0,0,cW,cH);
+  if(floorImg){const{ox,oy,w,h}=fr();bx.fillStyle='#fff';bx.fillRect(ox-2,oy-2,w+4,h+4);bx.drawImage(floorImg,ox,oy,w,h);}
+  else{bx.fillStyle='#F8F7F2';bx.fillRect(0,0,cW,cH);bx.strokeStyle='rgba(0,0,0,.07)';bx.lineWidth=.5;for(let x=0;x<cW;x+=40){bx.beginPath();bx.moveTo(x,0);bx.lineTo(x,cH);bx.stroke()}for(let y=0;y<cH;y+=40){bx.beginPath();bx.moveTo(0,y);bx.lineTo(cW,y);bx.stroke()}}
+}
+
+function buildWallMap(){
+  if(!floorImg)return;
+  setWS('computing','壁を解析中...');
+  const{ox,oy,w,h}=fr();
+  wmW=Math.ceil(cW/WS);wmH=Math.ceil(cH/WS);
+  const off=document.createElement('canvas');off.width=wmW;off.height=wmH;
+  const c=off.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,wmW,wmH);
+  c.drawImage(floorImg,ox/WS,oy/WS,w/WS,h/WS);
+  const px=c.getImageData(0,0,wmW,wmH).data;
+  wallMap=new Uint8Array(wmW*wmH);let cnt=0;
+  for(let i=0;i<wmW*wmH;i++){const r=px[i*4],g=px[i*4+1],b=px[i*4+2];if(.299*r+.587*g+.114*b<255-wThresh){wallMap[i]=1;cnt++;}}
+  document.getElementById('sW').textContent=cnt.toLocaleString();
+  setWS('active',`壁検出済み (${cnt.toLocaleString()}px)`);
+  drawAll();
+}
+function setWS(s,t){const e=document.getElementById('wallSt');e.className='ws '+s;document.getElementById('wallStTx').textContent=t;}
+
+function cntWalls(x1,y1,x2,y2){
+  if(!wallMap)return 0;
+  let mx1=Math.round(x1/WS),my1=Math.round(y1/WS),mx2=Math.round(x2/WS),my2=Math.round(y2/WS);
+  let ddx=Math.abs(mx2-mx1),ddy=Math.abs(my2-my1),sx=mx1<mx2?1:-1,sy=my1<my2?1:-1,err=ddx-ddy,cx=mx1,cy=my1,walls=0,prev=false;
+  while(true){
+    if(cx>=0&&cx<wmW&&cy>=0&&cy<wmH){const w=wallMap[cy*wmW+cx]===1;if(w&&!prev)walls++;prev=w;}
+    if(cx===mx2&&cy===my2)break;
+    const e2=2*err;if(e2>-ddy){err-=ddy;cx+=sx;}if(e2<ddx){err+=ddx;cy+=sy;}
+  }
+  return walls;
+}
+
+function rssi(dev,ddx,ddy,fx,fy){
+  const distPx=Math.sqrt(ddx*ddx+ddy*ddy);if(distPx<1)return-30;
+  // スケール設定済みならメートル換算、未設定なら仮定(10px=1m)
+  const distM = mPerPx ? distPx*mPerPx : distPx*0.1;
+  const freq=FV[dev.fqI]||dev.type.bands[0],n=freq>=5?3.5:2.8;
+  const d0=1; // 基準距離 1m
+  const base=-40+(dev.type.txBase-14)+(dev.txP-20)*.6;
+  let sig=base-10*n*Math.log10(Math.max(distM,d0)/d0);
+  if(wallMap&&fx!==undefined)sig-=cntWalls(fx,fy,fx+ddx,fy+ddy)*wAtt;
+  return sig;
+}
+
+function drawIndoorOv(){
+  ix.clearRect(0,0,cW,cH);
+
+  // ポリゴン指定がある場合：ポリゴンを緑で塗りつぶして表示
+  if(polyRegions.length>0){
+    ix.save();
+    polyRegions.forEach(pts=>{
+      if(pts.length<3)return;
+      ix.beginPath();ix.moveTo(pts[0].x,pts[0].y);
+      for(let i=1;i<pts.length;i++)ix.lineTo(pts[i].x,pts[i].y);
+      ix.closePath();
+      ix.fillStyle='rgba(29,158,117,0.22)';ix.fill();
+      ix.strokeStyle='rgba(29,158,117,0.7)';ix.lineWidth=1.5;ix.stroke();
+    });
+    ix.restore();
+    return;
+  }
+
+  const step=WS;
+  const id=ix.createImageData(cW,cH),data=id.data;
+  if(wallMap){
+    for(let my=0;my<wmH;my++)for(let mx=0;mx<wmW;mx++){
+      if(wallMap[my*wmW+mx]===1)continue;
+      for(let dy=0;dy<step&&my*step+dy<cH;dy++)for(let ddx2=0;ddx2<step&&mx*step+ddx2<cW;ddx2++){
+        const idx=((my*step+dy)*cW+(mx*step+ddx2))*4;
+        data[idx]=29;data[idx+1]=158;data[idx+2]=117;data[idx+3]=60;
+      }
+    }
+  } else if(floorImg){
+    const{ox,oy,w,h}=fr();
+    for(let y=0;y<cH;y++)for(let x=0;x<cW;x++){
+      if(x<ox||x>ox+w||y<oy||y>oy+h)continue;
+      const idx=(y*cW+x)*4;
+      data[idx]=29;data[idx+1]=158;data[idx+2]=117;data[idx+3]=60;
+    }
+  } else {
+    for(let i=0;i<cW*cH;i++){const idx=i*4;data[idx]=29;data[idx+1]=158;data[idx+2]=117;data[idx+3]=30;}
+  }
+  ix.putImageData(id,0,0);
+}
+
+function r2c(r){
+  const norm=Math.max(0,Math.min(1,(r+90)/60));
+  const stops=[[0,[26,26,255]],[.2,[0,140,255]],[.4,[0,220,120]],[.6,[200,220,0]],[.8,[255,160,0]],[1,[255,30,30]]];
+  let c1,c2,t;
+  for(let i=0;i<stops.length-1;i++){if(norm>=stops[i][0]&&norm<=stops[i+1][0]){t=(norm-stops[i][0])/(stops[i+1][0]-stops[i][0]);c1=stops[i][1];c2=stops[i+1][1];break;}}
+  if(!c1){c1=stops[stops.length-2][1];c2=stops[stops.length-1][1];t=1;}
+  return[Math.round(c1[0]+(c2[0]-c1[0])*t),Math.round(c1[1]+(c2[1]-c1[1])*t),Math.round(c1[2]+(c2[2]-c1[2])*t)];
+}
+
+function drawHeat(){
+  hx.clearRect(0,0,cW,cH);if(!placed.length)return;
+  const step=wallMap?8:6,cols=Math.ceil(cW/step),rows=Math.ceil(cH/step);
+  const id=hx.createImageData(cW,cH),data=id.data;
+  for(let row=0;row<rows;row++)for(let col=0;col<cols;col++){
+    const px=col*step+step/2,py=row*step+step/2;let maxR=-999;
+    for(const d of placed){const r=rssi(d,px-d.x,py-d.y,d.x,d.y);if(r>maxR)maxR=r;}
+    if(maxR<-90)continue;
+    const alpha=Math.max(0,Math.min(.75,(maxR+90)/60*.75));
+    const[r,g,b]=r2c(maxR),a=Math.round(alpha*255);
+    for(let dy=0;dy<step&&row*step+dy<cH;dy++)for(let ddx=0;ddx<step&&col*step+ddx<cW;ddx++){const idx=((row*step+dy)*cW+(col*step+ddx))*4;data[idx]=r;data[idx+1]=g;data[idx+2]=b;data[idx+3]=a;}
+  }
+  hx.putImageData(id,0,0);
+}
+
+function drawWallOv(){
+  wx.clearRect(0,0,cW,cH);if(!wallMap)return;
+  const id=wx.createImageData(cW,cH),data=id.data;
+  for(let my=0;my<wmH;my++)for(let mx=0;mx<wmW;mx++){
+    if(!wallMap[my*wmW+mx])continue;
+    for(let dy=0;dy<WS&&my*WS+dy<cH;dy++)for(let ddx=0;ddx<WS&&mx*WS+ddx<cW;ddx++){const idx=((my*WS+dy)*cW+(mx*WS+ddx))*4;data[idx]=239;data[idx+1]=159;data[idx+2]=39;data[idx+3]=140;}
+  }
+  wx.putImageData(id,0,0);
+}
+
+function drawDevs(){
+  dx.clearRect(0,0,cW,cH);
+  // 提案デバイスを点滅表示（半透明・破線円）
+  for(const d of optProposed){
+    dx.save();
+    dx.globalAlpha=0.7;
+    dx.setLineDash([4,3]);
+    dx.beginPath();dx.arc(d.x,d.y,17,0,Math.PI*2);
+    dx.fillStyle=d.type.color+'22';dx.fill();
+    dx.strokeStyle=d.type.color;dx.lineWidth=2;dx.stroke();
+    dx.setLineDash([]);dx.globalAlpha=1;
+    dx.font='17px sans-serif';dx.textAlign='center';dx.textBaseline='middle';
+    dx.fillText(d.type.icon,d.x,d.y);
+    dx.font='bold 9px -apple-system,sans-serif';dx.fillStyle=d.type.color;
+    dx.fillText('提案',d.x,d.y+22);
+    dx.restore();
+  }
+  for(const d of placed){
+    const sel=d===selP;
+    dx.save();if(sel){dx.shadowColor=d.type.color;dx.shadowBlur=12;}
+    dx.beginPath();dx.arc(d.x,d.y,sel?19:15,0,Math.PI*2);dx.fillStyle=d.type.color+'30';dx.fill();dx.strokeStyle=d.type.color;dx.lineWidth=sel?2:1.5;dx.stroke();dx.restore();
+    dx.font='17px sans-serif';dx.textAlign='center';dx.textBaseline='middle';dx.fillText(d.type.icon,d.x,d.y);
+    dx.font='9px -apple-system,sans-serif';dx.fillStyle='#555';dx.fillText(d.label,d.x,d.y+22);
+  }
+}
+
+// レイキャスト法でポリゴン内判定
+function ptInPoly(pts,x,y){
+  let inside=false;
+  for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+    const xi=pts[i].x,yi=pts[i].y,xj=pts[j].x,yj=pts[j].y;
+    if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)inside=!inside;
+  }
+  return inside;
+}
+function drawScaleBar(){
+  // スケール未設定なら何もしない
+  if(!mPerPx) return;
+
+  // 1m が何pxか計算
+  const oneMeterPx = 1 / mPerPx;
+
+  // バーの長さを「切りの良い実寸」に丸める（0.1m, 0.5m, 1m, 2m, 5m, 10m ...）
+  const niceValues = [0.1,0.2,0.5,1,2,5,10,20,50,100];
+  let barM = 1, barPx = oneMeterPx;
+  for(const v of niceValues){
+    const px = v / mPerPx;
+    if(px >= 60 && px <= 200){ barM=v; barPx=px; break; }
+    barM=v; barPx=px; // 最後まで行ったら最後の値を使う
+  }
+
+  const margin = 16;
+  const barH = 4;
+  const x2 = cW - margin;
+  const x1 = x2 - barPx;
+  const y  = cH - margin - 20;
+
+  // 背景（半透明）
+  dx.save();
+  dx.fillStyle = 'rgba(255,255,255,0.82)';
+  dx.beginPath();
+  dx.roundRect(x1-8, y-12, barPx+16, 32, 6);
+  dx.fill();
+
+  // バー本体
+  dx.fillStyle = '#2C2C2A';
+  dx.fillRect(x1, y, barPx, barH);
+
+  // 両端の縦線
+  dx.fillRect(x1, y-4, 2, barH+8);
+  dx.fillRect(x2-1, y-4, 2, barH+8);
+
+  // ラベル
+  dx.font = 'bold 11px -apple-system,sans-serif';
+  dx.fillStyle = '#2C2C2A';
+  dx.textAlign = 'center';
+  dx.textBaseline = 'top';
+  const label = barM >= 1 ? `${barM}m` : `${barM*100}cm`;
+  dx.fillText(label, (x1+x2)/2, y+barH+3);
+  dx.restore();
+}
+
+function isInsideBuilding(x, y){
+  // ポリゴン範囲指定がある場合：いずれかのポリゴン内にあればOK
+  if(polyRegions.length>0){
+    return polyRegions.some(pts=>ptInPoly(pts,x,y));
+  }
+  if(wallMap){
+    const mx=Math.round(x/WS), my=Math.round(y/WS);
+    if(mx<0||mx>=wmW||my<0||my>=wmH) return false;
+    return wallMap[my*wmW+mx]===0;
+  }
+  if(floorImg){
+    const{ox,oy,w,h}=fr();
+    return x>=ox&&x<=ox+w&&y>=oy&&y<=oy+h;
+  }
+  return true;
+}
+
+function updateStats(){
+  document.getElementById('sC').textContent=placed.length;
+  if(!placed.length){['sCv','sA','sP'].forEach(id=>document.getElementById(id).textContent='-');return;}
+  const step=16;let cov=0,tot=0,sumR=0,good=0;
+  for(let y=0;y<cH;y+=step)for(let x=0;x<cW;x+=step){
+    if(!isInsideBuilding(x,y))continue;
+    tot++;
+    let maxR=-999;
+    for(const d of placed)maxR=Math.max(maxR,rssi(d,x-d.x,y-d.y,d.x,d.y));
+    if(maxR>-80){cov++;sumR+=maxR;}
+    if(maxR>-70)good++;
+  }
+  if(tot===0){['sCv','sA','sP'].forEach(id=>document.getElementById(id).textContent='-');return;}
+  const pxToM2 = mPerPx ? mPerPx*mPerPx : 0.003;
+  document.getElementById('sCv').textContent=Math.round(cov*step*step*pxToM2)+' m²';
+  document.getElementById('sA').textContent=cov>0?Math.round(sumR/cov)+' dBm':'-';
+  document.getElementById('sP').textContent=Math.round(good/tot*100)+'%';
+}
+
+function addDev(x,y){
+  const cnt=placed.filter(d=>d.type.id===selDev.id).length+1;
+  const rel=toRel(x,y);
+  const d={type:selDev,x,y,rx:rel.rx,ry:rel.ry,label:selDev.name+' '+cnt,txP,fqI,id:Date.now()};
+  placed.push(d);selP=d;renderList();drawAll();saveState();
+}
+
+function renderList(){
+  const el=document.getElementById('placedList');el.innerHTML='';
+  if(!placed.length){el.innerHTML='<div class="ep">まだ配置されていません</div>';return;}
+  placed.forEach((d,i)=>{
+    const row=document.createElement('div');row.className='pi'+(d===selP?' sel':'');
+    row.innerHTML=`<span class="di">${d.type.icon}</span><span class="dn">${d.label}</span><span class="dl" data-i="${i}">✕</span>`;
+    row.addEventListener('click',e=>{
+      if(e.target.classList.contains('dl')){placed.splice(+e.target.dataset.i,1);if(selP===d)selP=null;renderList();drawAll();saveState();return;}
+      selP=d;syncSliders();renderList();drawAll();
+    });
+    el.appendChild(row);
+  });
+}
+
+function syncSliders(){
+  if(!selP)return;
+  txP=selP.txP;fqI=selP.fqI;
+  document.getElementById('txP').value=txP;document.getElementById('txPV').textContent=txP+'dBm';
+  document.getElementById('fqS').value=fqI;document.getElementById('fqV').textContent=FL[fqI];
+}
+
+// ── ポリゴン範囲指定ロジック ─────────────────
+function drawPolyLayer(){
+  px2.clearRect(0,0,cW,cH);
+  if(!polyMode||polyPts.length===0)return;
+  px2.save();
+  // 頂点を結ぶ線
+  px2.beginPath();px2.moveTo(polyPts[0].x,polyPts[0].y);
+  for(let i=1;i<polyPts.length;i++)px2.lineTo(polyPts[i].x,polyPts[i].y);
+  px2.strokeStyle='#1D9E75';px2.lineWidth=1.5;px2.setLineDash([5,3]);px2.stroke();
+  px2.setLineDash([]);
+  // 閉じる線のプレビュー（2点以上のとき）
+  if(polyPts.length>=2){
+    px2.beginPath();px2.moveTo(polyPts[polyPts.length-1].x,polyPts[polyPts.length-1].y);
+    px2.lineTo(polyPts[0].x,polyPts[0].y);
+    px2.strokeStyle='rgba(29,158,117,0.35)';px2.lineWidth=1;px2.setLineDash([3,4]);px2.stroke();px2.setLineDash([]);
+  }
+  // 頂点マーカー
+  polyPts.forEach((p,i)=>{
+    px2.beginPath();px2.arc(p.x,p.y,i===0?7:5,0,Math.PI*2);
+    px2.fillStyle=i===0?'#1D9E75':'#fff';px2.fill();
+    px2.strokeStyle='#1D9E75';px2.lineWidth=1.5;px2.stroke();
+  });
+  px2.restore();
+}
+
+function enterPolyMode(){
+  polyMode=true;polyPts=[];
+  document.getElementById('polyOverlay').classList.remove('hidden');
+  document.getElementById('polyToolbar').classList.add('hidden');
+  document.getElementById('polyHint').textContent='クリックで頂点を追加 / ダブルクリックで確定';
+  document.getElementById('bPoly').classList.add('active');
+  px2.clearRect(0,0,cW,cH);
+}
+function exitPolyMode(){
+  polyMode=false;polyPts=[];
+  document.getElementById('polyOverlay').classList.add('hidden');
+  document.getElementById('polyToolbar').classList.add('hidden');
+  document.getElementById('bPoly').classList.remove('active');
+  px2.clearRect(0,0,cW,cH);
+}
+// ── 状態の保存・復元 ─────────────────────────
+// ── 永続化：IndexedDB ────────────────────────
+// file://プロトコルでもlocalStorageより確実に動作する
+const DB_NAME='wifiSim', DB_VER=1, STORE='data';
+let db=null;
+
+function openDB(){
+  return new Promise((res,rej)=>{
+    if(db){res(db);return;}
+    const req=indexedDB.open(DB_NAME,DB_VER);
+    req.onupgradeneeded=e=>e.target.result.createObjectStore(STORE);
+    req.onsuccess=e=>{db=e.target.result;res(db);};
+    req.onerror=e=>rej(e);
+  });
+}
+function dbSet(key,val){
+  return openDB().then(db=>new Promise((res,rej)=>{
+    const tx=db.transaction(STORE,'readwrite');
+    tx.objectStore(STORE).put(val,key);
+    tx.oncomplete=()=>res();
+    tx.onerror=e=>rej(e);
+  }));
+}
+function dbGet(key){
+  return openDB().then(db=>new Promise((res,rej)=>{
+    const tx=db.transaction(STORE,'readonly');
+    const req=tx.objectStore(STORE).get(key);
+    req.onsuccess=e=>res(e.target.result);
+    req.onerror=e=>rej(e);
+  }));
+}
+
+function saveState(){
+  const savedPlaced=placed.map(d=>({
+    typeId:d.type.id, x:d.x, y:d.y, rx:d.rx, ry:d.ry, label:d.label, txP:d.txP, fqI:d.fqI
+  }));
+  dbSet('state', JSON.stringify({placed:savedPlaced, polyRegions}))
+    .catch(e=>console.warn('状態保存失敗:',e));
+}
+
+function saveImage(){
+  if(!floorImg) return;
+  try{
+    const off=document.createElement('canvas');
+    const maxSide=1200;
+    const scale=Math.min(1,maxSide/Math.max(floorImg.width,floorImg.height));
+    off.width=Math.round(floorImg.width*scale);
+    off.height=Math.round(floorImg.height*scale);
+    off.getContext('2d').drawImage(floorImg,0,0,off.width,off.height);
+    const b64=off.toDataURL('image/jpeg',0.85);
+    dbSet('image', b64).catch(e=>console.warn('画像保存失敗:',e));
+  }catch(e){ console.warn('画像保存失敗:',e); }
+}
+
+async function loadState(){
+  try{
+    // 図面画像の復元
+    const imgData=await dbGet('image');
+    if(imgData){
+      await new Promise(res=>{
+        const img=new Image();
+        img.onload=()=>{
+          floorImg=img;
+          document.getElementById('dz').classList.add('hidden');
+          buildWallMap();
+          res();
+        };
+        img.onerror=()=>res();
+        img.src=imgData;
+      });
+    }
+    // デバイス・ポリゴンの復元
+    const raw=await dbGet('state');
+    if(!raw)return;
+    const data=JSON.parse(raw);
+    if(data.polyRegions&&data.polyRegions.length>0){
+      polyRegions=data.polyRegions.map(pts=>pts.map(p=>{
+        if(p.rx!==undefined){const q=toPx(p.rx,p.ry);return{...p,x:q.x,y:q.y};}
+        return p;
+      }));
+      indoorOn=true;
+      document.getElementById('bIndoor').classList.add('active');
+    }
+    if(data.placed&&data.placed.length>0){
+      data.placed.forEach(s=>{
+        const dev=DEVICES.find(d=>d.id===s.typeId);
+        if(!dev)return;
+        const p=s.rx!==undefined?toPx(s.rx,s.ry):{x:s.x,y:s.y};
+        placed.push({type:dev,x:p.x,y:p.y,rx:s.rx,ry:s.ry,label:s.label,txP:s.txP,fqI:s.fqI,id:Date.now()+Math.random()});
+      });
+      renderList();
+      drawAll();
+    }
+  }catch(e){ console.warn('状態復元失敗:',e); }
+}
+// 後方互換：旧localStorageキーを削除
+try{localStorage.removeItem('wifiSimPolyRegions');localStorage.removeItem('wifiSim_v1');localStorage.removeItem('wifiSim_img');}catch(e){}
+
+// savePolyRegions は saveState に統合
+function savePolyRegions(){ saveState(); }
+function confirmPoly(){
+  if(polyPts.length>=3){
+    polyRegions.push([...polyPts]);
+    savePolyRegions();
+    if(indoorOn)drawAll();else{indoorOn=true;document.getElementById('bIndoor').classList.add('active');drawAll();}
+  }
+  exitPolyMode();
+}
+
+let lastPolyClick=0;
+document.getElementById('polyOverlay').addEventListener('click',e=>{
+  if(!polyMode)return;
+  const r=cw.getBoundingClientRect();
+  const x=e.clientX-r.left,y=e.clientY-r.top;
+  const now=Date.now();
+  // ダブルクリック判定（300ms以内）
+  if(now-lastPolyClick<300){
+    // 最後の重複点を除いて確定
+    if(polyPts.length>1)polyPts.pop();
+    confirmPoly();
+    lastPolyClick=0;return;
+  }
+  lastPolyClick=now;
+  // 最初の点に近ければ閉じて確定
+  if(polyPts.length>=3&&Math.hypot(x-polyPts[0].x,y-polyPts[0].y)<12){
+    confirmPoly();return;
+  }
+  const relPt=toRel(x,y);
+  polyPts.push({x,y,rx:relPt.rx,ry:relPt.ry});
+  document.getElementById('polyToolbar').classList.remove('hidden');
+  document.getElementById('polyHint').textContent=`頂点 ${polyPts.length}点 / ダブルクリックまたは最初の点をクリックで確定`;
+  drawPolyLayer();
+});
+
+document.getElementById('polyUndo').addEventListener('click',()=>{
+  if(polyPts.length>0){polyPts.pop();drawPolyLayer();}
+  if(polyPts.length===0)document.getElementById('polyToolbar').classList.add('hidden');
+});
+document.getElementById('polyCancel').addEventListener('click',()=>{
+  // 最後のポリゴンを取り消す
+  if(polyRegions.length>0){polyRegions.pop();savePolyRegions();drawAll();}
+  exitPolyMode();
+});
+document.getElementById('polyDone').addEventListener('click',()=>{ if(polyPts.length>=3)confirmPoly(); });
+document.getElementById('bPoly').addEventListener('click',()=>{
+  if(polyMode)exitPolyMode();else enterPolyMode();
+});
+
+// ── スケール計測ロジック ──────────────────
+function drawScaleLayer(){
+  sx.clearRect(0,0,cW,cH);
+  if(!scalePt1&&!scalePt2)return;
+  sx.strokeStyle='#378ADD';sx.lineWidth=2;sx.setLineDash([6,3]);
+  if(scalePt1){
+    // 点1のマーカー
+    sx.fillStyle='#378ADD';
+    sx.beginPath();sx.arc(scalePt1.x,scalePt1.y,5,0,Math.PI*2);sx.fill();
+    sx.fillStyle='#fff';sx.beginPath();sx.arc(scalePt1.x,scalePt1.y,2.5,0,Math.PI*2);sx.fill();
+  }
+  if(scalePt1&&scalePt2){
+    sx.beginPath();sx.moveTo(scalePt1.x,scalePt1.y);sx.lineTo(scalePt2.x,scalePt2.y);sx.stroke();
+    sx.fillStyle='#378ADD';
+    sx.beginPath();sx.arc(scalePt2.x,scalePt2.y,5,0,Math.PI*2);sx.fill();
+    sx.fillStyle='#fff';sx.beginPath();sx.arc(scalePt2.x,scalePt2.y,2.5,0,Math.PI*2);sx.fill();
+    // 距離ラベル（px）
+    const mx=(scalePt1.x+scalePt2.x)/2,my=(scalePt1.y+scalePt2.y)/2;
+    const dpx=Math.round(Math.hypot(scalePt2.x-scalePt1.x,scalePt2.y-scalePt1.y));
+    sx.setLineDash([]);
+    sx.fillStyle='#378ADD';sx.font='bold 11px -apple-system,sans-serif';
+    sx.textAlign='center';sx.textBaseline='bottom';sx.fillText(dpx+'px',mx,my-4);
+  }
+}
+
+function enterScaleMode(){
+  scaleMode=true;scalePt1=null;scalePt2=null;
+  document.getElementById('scaleOverlay').classList.remove('hidden');
+  document.getElementById('scaleHint').textContent='1点目をクリックしてください';
+  document.getElementById('scaleInputBox').classList.add('hidden');
+  document.getElementById('bScale').classList.add('active');
+  sx.clearRect(0,0,cW,cH);
+}
+function exitScaleMode(){
+  scaleMode=false;scalePt1=null;scalePt2=null;
+  document.getElementById('scaleOverlay').classList.add('hidden');
+  document.getElementById('scaleInputBox').classList.add('hidden');
+  document.getElementById('bScale').classList.remove('active');
+  sx.clearRect(0,0,cW,cH);
+}
+
+document.getElementById('scaleOverlay').addEventListener('click',e=>{
+  if(!scaleMode)return;
+  const r=cw.getBoundingClientRect();
+  const x=e.clientX-r.left,y=e.clientY-r.top;
+  if(!scalePt1){
+    scalePt1={x,y};
+    document.getElementById('scaleHint').textContent='2点目をクリックしてください';
+    drawScaleLayer();
+  } else {
+    scalePt2={x,y};
+    drawScaleLayer();
+    // 入力ボックスを2点の中間あたりに表示
+    const mx=Math.min((scalePt1.x+scalePt2.x)/2,cW-240);
+    const my=Math.min((scalePt1.y+scalePt2.y)/2+20,cH-130);
+    const box=document.getElementById('scaleInputBox');
+    box.style.left=Math.max(8,mx)+'px';
+    box.style.top=Math.max(8,my)+'px';
+    box.classList.remove('hidden');
+    document.getElementById('scaleDist').focus();
+    document.getElementById('scaleDist').select();
+    document.getElementById('scaleOverlay').classList.add('hidden');
+  }
+});
+
+document.getElementById('scaleOkBtn').addEventListener('click',()=>{
+  const dist=parseFloat(document.getElementById('scaleDist').value);
+  if(!scalePt1||!scalePt2||!dist||dist<=0)return;
+  const px=Math.hypot(scalePt2.x-scalePt1.x,scalePt2.y-scalePt1.y);
+  mPerPx=dist/px;
+  document.getElementById('sScale').textContent=(mPerPx*100).toFixed(2)+'cm/px';
+  exitScaleMode();
+  drawAll();
+});
+document.getElementById('scaleCancelBtn').addEventListener('click',()=>exitScaleMode());
+document.getElementById('bScale').addEventListener('click',()=>{
+  if(scaleMode)exitScaleMode();else enterScaleMode();
+});
+
+function buildGrid(){
+  const g=document.getElementById('deviceGrid');
+  DEVICES.forEach(dev=>{
+    const b=document.createElement('div');b.className='db'+(dev===selDev?' active':'');
+    b.innerHTML=`<span class="ic">${dev.icon}</span><span class="nm">${dev.name}</span><span class="fq">${dev.freq}</span>`;
+    b.addEventListener('click',()=>{selDev=dev;document.querySelectorAll('.db').forEach(x=>x.classList.remove('active'));b.classList.add('active');});
+    g.appendChild(b);
+  });
+}
+
+// ── イベント ──────────────────────────
+dc.addEventListener('click',e=>{
+  if(mode!=='place')return;
+  const r=dc.getBoundingClientRect();addDev(e.clientX-r.left,e.clientY-r.top);
+});
+dc.addEventListener('mousedown',e=>{
+  if(mode!=='move')return;
+  const r=dc.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  for(let i=placed.length-1;i>=0;i--){const d=placed[i];if(Math.hypot(mx-d.x,my-d.y)<20){dragging=d;dragOff={x:mx-d.x,y:my-d.y};selP=d;renderList();drawAll();break;}}
+});
+dc.addEventListener('mousemove',e=>{
+  const r=dc.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  if(dragging){dragging.x=mx-dragOff.x;dragging.y=my-dragOff.y;drawAll();}
+  const tt=document.getElementById('tt');let found=null;
+  for(const d of placed){if(Math.hypot(mx-d.x,my-d.y)<22){found=d;break;}}
+  if(found){
+    document.getElementById('ttN').textContent=found.label;
+    document.getElementById('ttV').textContent=`TX: ${found.txP}dBm | ${FL[found.fqI]}`;
+    tt.style.left=(mx+14)+'px';tt.style.top=(my-12)+'px';tt.classList.add('show');
+  }else if(placed.length){
+    let maxR=-999,bd=null;for(const d of placed){const rv=rssi(d,mx-d.x,my-d.y,d.x,d.y);if(rv>maxR){maxR=rv;bd=d;}}
+    if(maxR>-95){
+      const wn=wallMap&&bd?cntWalls(bd.x,bd.y,mx,my):0;
+      document.getElementById('ttN').textContent='信号強度';
+      document.getElementById('ttV').textContent=Math.round(maxR)+' dBm'+(wallMap?` | 壁 ${wn}枚`:'');
+      tt.style.left=(mx+14)+'px';tt.style.top=(my-12)+'px';tt.classList.add('show');
+    }else tt.classList.remove('show');
+  }else tt.classList.remove('show');
+});
+dc.addEventListener('mouseup',()=>{
+  if(dragging){
+    const rel=toRel(dragging.x,dragging.y);
+    dragging.rx=rel.rx;dragging.ry=rel.ry;
+    saveState();
+  }
+  dragging=null;
+});
+dc.addEventListener('mouseleave',()=>{dragging=null;document.getElementById('tt').classList.remove('show');});
+
+// ドラッグ&ドロップ
+cw.addEventListener('dragover',e=>e.preventDefault());
+cw.addEventListener('drop',e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f&&f.type.startsWith('image/'))loadImg(f);});
+
+function buildLegend(){
+  const body=document.getElementById('devLegendBody');
+  body.innerHTML='';
+  DEVICES.forEach(dev=>{
+    const row=document.createElement('div');row.className='dl-row';
+    const tags=dev.tags.map(t=>`<span class="dl-tag" style="background:${t.c};color:${t.tc}">${t.t}</span>`).join('');
+    row.innerHTML=`
+      <div class="dl-icon">${dev.icon}</div>
+      <div class="dl-info">
+        <div class="dl-name" style="color:${dev.color}">${dev.name} <span style="font-weight:400;color:var(--ts);font-size:10px">${dev.freq}</span></div>
+        <div class="dl-tags">${tags}</div>
+        <div class="dl-desc">到達距離: ${dev.range}　最大速度: ${dev.speed}<br>${dev.desc}</div>
+      </div>`;
+    body.appendChild(row);
+  });
+}
+// ── デバイス凡例パネルのドラッグ移動 ──
+(function(){
+  const panel = document.getElementById('devLegend');
+  const hd    = panel.querySelector('.dl-hd');
+  let isDrag=false, startX=0, startY=0, origL=0, origT=0;
+
+  hd.addEventListener('mousedown', e=>{
+    if(e.target.closest('button')) return;
+    isDrag=true;
+    hd.classList.add('dragging');
+    const rect=panel.getBoundingClientRect();
+    const prect=panel.offsetParent.getBoundingClientRect();
+    origL=rect.left-prect.left;
+    origT=rect.top-prect.top;
+    startX=e.clientX; startY=e.clientY;
+    // bottom/rightをtop/leftに切り替え
+    panel.style.right='auto';
+    panel.style.bottom='auto';
+    panel.style.left=origL+'px';
+    panel.style.top=origT+'px';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e=>{
+    if(!isDrag) return;
+    const dx=e.clientX-startX, dy=e.clientY-startY;
+    const parent=panel.offsetParent;
+    const maxL=parent.clientWidth-panel.offsetWidth;
+    const maxT=parent.clientHeight-panel.offsetHeight;
+    panel.style.left=Math.max(0,Math.min(origL+dx,maxL))+'px';
+    panel.style.top=Math.max(0,Math.min(origT+dy,maxT))+'px';
+  });
+  document.addEventListener('mouseup', ()=>{
+    if(!isDrag) return;
+    isDrag=false;
+    hd.classList.remove('dragging');
+  });
+})();
+
+document.getElementById('bLegend').addEventListener('click',()=>{
+  const p=document.getElementById('devLegend');
+  p.classList.toggle('hidden');
+  document.getElementById('bLegend').classList.toggle('active',!p.classList.contains('hidden'));
+});
+document.getElementById('bLegendClose').addEventListener('click',()=>{
+  document.getElementById('devLegend').classList.add('hidden');
+  document.getElementById('bLegend').classList.remove('active');
+});
+document.getElementById('bPlace').addEventListener('click',()=>{mode='place';dc.classList.remove('mm');document.getElementById('bPlace').classList.add('active');document.getElementById('bMove').classList.remove('active');document.getElementById('mInfo').textContent='デバイスを選択してクリックで配置';});
+document.getElementById('bMove').addEventListener('click',()=>{mode='move';dc.classList.add('mm');document.getElementById('bMove').classList.add('active');document.getElementById('bPlace').classList.remove('active');document.getElementById('mInfo').textContent='デバイスをドラッグして移動';});
+document.getElementById('bHeat').addEventListener('click',()=>{heatOn=!heatOn;document.getElementById('bHeat').classList.toggle('active',heatOn);drawAll();});
+document.getElementById('bWall').addEventListener('click',()=>{wallOn=!wallOn;document.getElementById('bWall').classList.toggle('active',wallOn);drawAll();});
+document.getElementById('bIndoor').addEventListener('click',()=>{indoorOn=!indoorOn;document.getElementById('bIndoor').classList.toggle('active',indoorOn);drawAll();});
+document.getElementById('bDel').addEventListener('click',()=>{
+  if(!selP)return;
+  placed=placed.filter(d=>d!==selP);selP=null;renderList();drawAll();saveState();
+});
+document.getElementById('bClear').addEventListener('click',()=>{placed=[];selP=null;renderList();drawAll();saveState();});
+document.getElementById('bClearPoly').addEventListener('click',()=>{polyRegions=[];savePolyRegions();if(indoorOn)drawAll();});
+
+document.getElementById('txP').addEventListener('input',function(){txP=+this.value;document.getElementById('txPV').textContent=txP+'dBm';if(selP){selP.txP=txP;drawAll();saveState();}});
+document.getElementById('fqS').addEventListener('input',function(){fqI=+this.value;document.getElementById('fqV').textContent=FL[fqI];if(selP){selP.fqI=fqI;drawAll();saveState();}});
+document.getElementById('wt').addEventListener('input',function(){wThresh=+this.value;document.getElementById('wtV').textContent=wThresh;if(floorImg)buildWallMap();});
+document.getElementById('wa').addEventListener('input',function(){wAtt=+this.value;document.getElementById('waV').textContent=wAtt+'dB';drawAll();});
+
+// ── ファイル読み込み ──────────────────
+document.getElementById('fileInput').addEventListener('change',function(){
+  if(this.files&&this.files[0])loadImg(this.files[0]);
+});
+
+// ── 最適配置ロジック ─────────────────────────
+function buildOptDevSelect(){
+  const sel=document.getElementById('optDevType');
+  sel.innerHTML='';
+  DEVICES.forEach(dev=>{
+    const o=document.createElement('option');
+    o.value=dev.id;o.textContent=dev.icon+' '+dev.name;
+    sel.appendChild(o);
+  });
+}
+
+// 建物内の候補位置グリッドを生成
+function getCandidates(gridStep){
+  const cands=[];
+  for(let y=gridStep/2;y<cH;y+=gridStep)
+    for(let x=gridStep/2;x<cW;x+=gridStep)
+      if(isInsideBuilding(x,y))cands.push({x,y});
+  return cands;
+}
+
+// サンプル点（建物内）を生成
+function getSamplePts(step){
+  const pts=[];
+  for(let y=step/2;y<cH;y+=step)
+    for(let x=step/2;x<cW;x+=step)
+      if(isInsideBuilding(x,y))pts.push({x,y});
+  return pts;
+}
+
+// 指定デバイスセットでのカバー率を計算（-70dBm以上）
+function calcCoverage(devList, samplePts){
+  if(!samplePts.length)return 0;
+  let good=0;
+  for(const p of samplePts){
+    let maxR=-999;
+    for(const d of devList)maxR=Math.max(maxR,rssi(d,p.x-d.x,p.y-d.y,d.x,d.y));
+    if(maxR>=-70)good++;
+  }
+  return good/samplePts.length;
+}
+
+// ── 最適配置：デバイス数最小化＋既存移動最適化 ──
+async function runOptimize(){
+  function tick(){ return new Promise(r=>setTimeout(r,0)); }
+  optMovedPlaced = null;
+
+  const targetCov = parseInt(document.getElementById('optTarget').value)/100;
+  const maxTotal  = parseInt(document.getElementById('optMax').value);
+  const maxAdd    = Math.max(0, maxTotal - placed.length); // 追加可能台数 = 上限 - 既存台数
+  const devTypeId = document.getElementById('optDevType').value;
+  const devType   = DEVICES.find(d=>d.id===devTypeId);
+  const prog      = document.getElementById('optProgress');
+  const runBtn    = document.getElementById('optRun');
+  const applyBtn  = document.getElementById('optApply');
+
+  runBtn.disabled=true; applyBtn.classList.add('hidden');
+  optProposed=[]; drawDevs();
+
+  try {
+    // ── サンプル点・候補点を生成 ──
+    const samplePts = getSamplePts(24);
+    if(!samplePts.length){
+      prog.textContent='建物内エリアが設定されていません'; runBtn.disabled=false; return;
+    }
+    prog.textContent=`サンプル点 ${samplePts.length}点 / 候補位置を生成中...`;
+    await tick();
+
+    const candidates = getCandidates(40);
+    if(!candidates.length){
+      prog.textContent='候補位置がありません'; runBtn.disabled=false; return;
+    }
+    prog.textContent=`候補位置 ${candidates.length}点を生成しました`;
+    await tick();
+
+    // ── Step1: 既存デバイスの移動最適化 ──
+    let current = placed.map(d=>({...d}));
+    if(current.length > 0){
+      for(let di=0; di<current.length; di++){
+        prog.textContent=`既存デバイス最適化 ${di+1}/${current.length}台目...`;
+        await tick();
+        let bestCov = calcCoverage(current, samplePts);
+        let bestPos = {x:current[di].x, y:current[di].y};
+        for(const pos of candidates){
+          const orig = {x:current[di].x, y:current[di].y};
+          current[di].x=pos.x; current[di].y=pos.y;
+          const cov = calcCoverage(current, samplePts);
+          if(cov > bestCov){ bestCov=cov; bestPos={x:pos.x,y:pos.y}; }
+          current[di].x=orig.x; current[di].y=orig.y;
+        }
+        current[di].x=bestPos.x; current[di].y=bestPos.y;
+      }
+    }
+    optMovedPlaced = current.map(d=>({...d}));
+    const movedCov = calcCoverage(current, samplePts);
+
+    // 移動した既存デバイスを提案として表示
+    const moveProposals = current
+      .map((d,i)=>({...d,_isMove:true,_origIdx:i}))
+      .filter((d,i)=>placed[i]&&(Math.abs(d.x-placed[i].x)>3||Math.abs(d.y-placed[i].y)>3));
+
+    // 既存台数が上限に達している場合は新規追加なし
+    if(maxAdd <= 0 && movedCov < targetCov){
+      optProposed = moveProposals;
+      drawAll();
+      prog.textContent=`設置台数が上限(${maxTotal}台)に達しています。既存${moveProposals.length>0?moveProposals.length+'台移動で':'デバイスで'}カバー率 ${Math.round(movedCov*100)}%`;
+      if(moveProposals.length>0) applyBtn.classList.remove('hidden');
+      runBtn.disabled=false; return;
+    }
+
+    // ── Step2: 既存移動だけで目標達成できるか ──
+    if(movedCov >= targetCov){
+      optProposed = moveProposals;
+      drawAll();
+      prog.textContent=`既存${moveProposals.length}台の移動のみで目標達成 → ${Math.round(movedCov*100)}%`;
+      if(moveProposals.length>0) applyBtn.classList.remove('hidden');
+      else prog.textContent=`既に目標カバー率 ${Math.round(targetCov*100)}% を達成しています（${Math.round(movedCov*100)}%）`;
+      runBtn.disabled=false; return;
+    }
+
+    // ── Step3: 新規デバイスを貪欲法で1台ずつ追加（目標達成で打ち切り） ──
+    const proposed = [];
+    let curCov = movedCov;
+    for(let i=0; i<maxAdd; i++){
+      prog.textContent=`新規設置 ${i+1}台目を探索中... (現在 ${Math.round(curCov*100)}% / 目標 ${Math.round(targetCov*100)}%)`;
+      await tick();
+      let bestCov=-1, bestPos=null;
+      for(const pos of candidates){
+        const trial = {type:devType,x:pos.x,y:pos.y,txP:txP,fqI:fqI,id:0};
+        const cov = calcCoverage([...current,...proposed,trial], samplePts);
+        if(cov>bestCov){ bestCov=cov; bestPos=pos; }
+      }
+      if(!bestPos) break;
+      const n = placed.filter(d=>d.type.id===devTypeId).length + proposed.length + 1;
+      const relOpt=toRel(bestPos.x,bestPos.y);
+      proposed.push({type:devType,x:bestPos.x,y:bestPos.y,rx:relOpt.rx,ry:relOpt.ry,label:devType.name+' '+n,txP:txP,fqI:fqI,id:Date.now()+i});
+      curCov = bestCov;
+      if(curCov >= targetCov) break; // 最小台数で達成
+    }
+
+    optProposed = [...moveProposals, ...proposed];
+    drawAll();
+    let msg='';
+    if(moveProposals.length>0) msg+=`既存${moveProposals.length}台移動 + `;
+    msg+=`新規${proposed.length}台設置 → ${Math.round(curCov*100)}%`;
+    prog.textContent = msg;
+    if(optProposed.length>0) applyBtn.classList.remove('hidden');
+
+  } catch(e) {
+    prog.textContent='エラーが発生しました: '+e.message;
+    console.error(e);
+  }
+  runBtn.disabled=false;
+}
+
+// 採用時に移動提案も反映できるよう保存
+let optMovedPlaced = null;
+
+document.getElementById('optTarget').addEventListener('input',function(){document.getElementById('optTargetV').textContent=this.value+'%';});
+document.getElementById('optMax').addEventListener('input',function(){document.getElementById('optMaxV').textContent=this.value+'台';});
+document.getElementById('optRun').addEventListener('click',()=>runOptimize());
+document.getElementById('optApply').addEventListener('click',()=>{
+  // 移動提案を反映（既存デバイスの位置を更新）
+  if(optMovedPlaced){
+    optMovedPlaced.forEach((d,i)=>{ if(placed[i]){placed[i].x=d.x;placed[i].y=d.y;} });
+    optMovedPlaced=null;
+  }
+  // 新規提案を追加（_isMove でないものだけ）
+  const newDevs = optProposed.filter(d=>!d._isMove);
+  placed.push(...newDevs);
+  optProposed=[];
+  renderList();saveState();drawAll();
+  document.getElementById('optApply').classList.add('hidden');
+  document.getElementById('optProgress').textContent='採用しました。';
+});
+document.getElementById('optClose').addEventListener('click',()=>{
+  optProposed=[];
+  document.getElementById('optPanel').classList.add('hidden');
+  document.getElementById('bOpt').classList.remove('active');
+  drawAll();
+});
+document.getElementById('bOpt').addEventListener('click',()=>{
+  const panel=document.getElementById('optPanel');
+  const isHidden=panel.classList.contains('hidden');
+  panel.classList.toggle('hidden',!isHidden);
+  document.getElementById('bOpt').classList.toggle('active',isHidden);
+  if(isHidden){
+    buildOptDevSelect();
+    document.getElementById('optProgress').textContent='';
+    document.getElementById('optApply').classList.add('hidden');
+    optProposed=[];drawAll();
+  }
+});
+
+function loadImg(file){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{floorImg=img;document.getElementById('dz').classList.add('hidden');buildWallMap();saveImage();};
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── エクスポート・インポート ──────────────────
+async function exportState(){
+  try{
+    // 画像をbase64で取得
+    let imgB64=null;
+    if(floorImg){
+      const off=document.createElement('canvas');
+      const maxSide=1200;
+      const scale=Math.min(1,maxSide/Math.max(floorImg.width,floorImg.height));
+      off.width=Math.round(floorImg.width*scale);
+      off.height=Math.round(floorImg.height*scale);
+      off.getContext('2d').drawImage(floorImg,0,0,off.width,off.height);
+      imgB64=off.toDataURL('image/jpeg',0.85);
+    }
+    const savedPlaced=placed.map(d=>({
+      typeId:d.type.id,x:d.x,y:d.y,rx:d.rx,ry:d.ry,label:d.label,txP:d.txP,fqI:d.fqI
+    }));
+    const payload={
+      version:1,
+      exportedAt:new Date().toISOString(),
+      image:imgB64,
+      placed:savedPlaced,
+      polyRegions,
+      mPerPx,
+    };
+    const json=JSON.stringify(payload);
+    const blob=new Blob([json],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const ts=new Date().toISOString().slice(0,16).replace('T','_').replace(':','-');
+    a.href=url; a.download=`wifisim_${ts}.wifisim`; a.click();
+    URL.revokeObjectURL(url);
+  }catch(e){ alert('エクスポートに失敗しました: '+e.message); }
+}
+
+function importState(file){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      if(!data.version){ alert('無効なファイルです'); return; }
+
+      // 既存状態をリセット
+      placed=[];selP=null;polyRegions=[];mPerPx=null;floorImg=null;
+      optProposed=[];optMovedPlaced=null;
+      document.getElementById('dz').classList.remove('hidden');
+      document.getElementById('sScale').textContent='未設定';
+
+      // 図面画像の復元
+      if(data.image){
+        const img=new Image();
+        img.onload=()=>{
+          floorImg=img;
+          document.getElementById('dz').classList.add('hidden');
+          buildWallMap();
+        };
+        img.src=data.image;
+      }
+      // ポリゴンの復元
+      if(data.polyRegions&&data.polyRegions.length>0){
+        polyRegions=data.polyRegions;
+        indoorOn=true;
+        document.getElementById('bIndoor').classList.add('active');
+      }
+      // スケールの復元
+      if(data.mPerPx){
+        mPerPx=data.mPerPx;
+        document.getElementById('sScale').textContent=(mPerPx*100).toFixed(2)+'cm/px';
+      }
+      // デバイスの復元
+      if(data.placed&&data.placed.length>0){
+        data.placed.forEach(s=>{
+          const dev=DEVICES.find(d=>d.id===s.typeId);
+          if(!dev)return;
+          const ip=s.rx!==undefined?toPx(s.rx,s.ry):{x:s.x,y:s.y};
+          placed.push({type:dev,x:ip.x,y:ip.y,rx:s.rx,ry:s.ry,label:s.label,txP:s.txP,fqI:s.fqI,id:Date.now()+Math.random()});
+        });
+      }
+      renderList();
+      saveState();
+      if(data.image) saveImage();
+      drawAll();
+    }catch(err){ alert('インポートに失敗しました: '+err.message); }
+  };
+  reader.readAsText(file);
+}
+
+document.getElementById('bExport').addEventListener('click',()=>exportState());
+document.getElementById('importInput').addEventListener('change',function(){
+  if(this.files&&this.files[0]){ importState(this.files[0]); this.value=''; }
+});
+
+buildGrid();
+buildLegend();
+loadState();
+window.addEventListener('resize',resize);
+resize();
+</script>
+</body>
+</html>

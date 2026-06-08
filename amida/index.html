@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>あみだくじ共有アプリ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.1.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.1.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore-compat.js"></script>
+    
+    <script src="firebase-config.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap');
+        body { font-family: 'Noto Sans JP', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        input[type="range"] { accent-color: #2563eb; }
+        .animate-fade-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body class="bg-slate-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        // --- Firebase Initialization ---
+        // 外部ファイルから window.firebaseConfig を読み込む
+        let firebaseConfig = window.firebaseConfig || null;
+
+        // 環境変数（Canvas実行用など）がある場合は上書き
+        try {
+            if (window.__firebase_config) {
+                firebaseConfig = JSON.parse(window.__firebase_config);
+            }
+        } catch (e) {
+            console.error("Config parse error", e);
+        }
+
+        const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'amidakuji-final';
+        
+        let auth, db;
+        const isFirebaseEnabled = !!(firebaseConfig && firebaseConfig.apiKey);
+
+        if (isFirebaseEnabled) {
+            try {
+                const app = !firebase.apps.length ? firebase.initializeApp(firebaseConfig) : firebase.app();
+                auth = firebase.auth();
+                db = firebase.firestore();
+            } catch (err) {
+                console.error("Firebase init error:", err);
+            }
+        }
+
+        /**
+         * 日本語入力（IME）を安定させるためのカスタム入力コンポーネント
+         */
+        function NameInput({ initialValue, onSave, disabled, placeholder }) {
+            const [localValue, setLocalValue] = useState(initialValue);
+            const [isFocused, setIsFocused] = useState(false);
+
+            useEffect(() => {
+                if (!isFocused) {
+                    setLocalValue(initialValue);
+                }
+            }, [initialValue, isFocused]);
+
+            const handleBlur = () => {
+                setIsFocused(false);
+                if (localValue !== initialValue) {
+                    onSave(localValue);
+                }
+            };
+
+            return (
+                <input
+                    type="text"
+                    placeholder={placeholder}
+                    value={localValue}
+                    disabled={disabled}
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={handleBlur}
+                    onChange={(e) => setLocalValue(e.target.value)}
+                    className={`w-full text-center text-xs border-b-2 outline-none pb-2 transition-all duration-500 ${
+                        localValue ? 'border-blue-500 font-black text-slate-800' : 'border-slate-100 focus:border-blue-300 text-slate-300 italic'
+                    }`}
+                />
+            );
+        }
+
+        function App() {
+            const [user, setUser] = useState(null);
+            const [view, setView] = useState('setup'); 
+            const [gameId, setGameId] = useState(null);
+            const [gameTitle, setGameTitle] = useState('今日のあみだくじ');
+            const [memberCount, setMemberCount] = useState(5);
+            const [prizes, setPrizes] = useState(Array(5).fill('はずれ').map((v, i) => i === 0 ? '当たり' : v));
+            const [lines, setLines] = useState([]);
+            const [entries, setEntries] = useState({});
+            const [isRevealed, setIsRevealed] = useState(false);
+            const [winners, setWinners] = useState([]);
+            const [isAdmin, setIsAdmin] = useState(false);
+
+            const canvasRef = useRef(null);
+
+            // Firebaseが有効でない場合の表示
+            if (!isFirebaseEnabled) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center p-6 bg-slate-100">
+                        <div className="max-w-md w-full bg-white p-8 rounded-3xl shadow-xl text-center border-t-8 border-red-500">
+                            <h2 className="text-2xl font-black text-slate-800 mb-4">Firebase設定が必要です</h2>
+                            <p className="text-slate-600 mb-6 leading-relaxed">
+                                <code>firebase-config.js</code> ファイルを読み込めないか、設定が空です。
+                            </p>
+                        </div>
+                    </div>
+                );
+            }
+
+            // 認証
+            useEffect(() => {
+                const initAuth = async () => {
+                    try {
+                        const token = window.__initial_auth_token;
+                        if (token) {
+                            await auth.signInWithCustomToken(token);
+                        } else {
+                            await auth.signInAnonymously();
+                        }
+                    } catch (err) {
+                        console.error("Auth Error:", err);
+                    }
+                };
+                initAuth();
+                const unsubscribe = auth.onAuthStateChanged(setUser);
+                return () => unsubscribe();
+            }, []);
+
+            // URLハッシュ
+            useEffect(() => {
+                const handleHashChange = () => {
+                    const hash = window.location.hash.replace('#', '');
+                    if (hash && user) {
+                        setGameId(hash);
+                    }
+                };
+                handleHashChange();
+                window.addEventListener('hashchange', handleHashChange);
+                return () => window.removeEventListener('hashchange', handleHashChange);
+            }, [user]);
+
+            // Firestore監視
+            useEffect(() => {
+                if (!user || !gameId || !db) return;
+
+                const gameDocRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('games').doc(gameId);
+                const unsubGame = gameDocRef.onSnapshot((docSnap) => {
+                    if (docSnap.exists) {
+                        const data = docSnap.data();
+                        setLines(data.lines || []);
+                        setPrizes(data.prizes || []);
+                        setMemberCount(data.memberCount || 5);
+                        setGameTitle(String(data.title || 'あみだくじ'));
+                        setIsRevealed(!!data.isRevealed);
+                        setIsAdmin(data.adminUid === user.uid);
+                        setView('play');
+                    } else {
+                        setView('setup');
+                        window.location.hash = '';
+                    }
+                }, (err) => console.error("Game Sync Error:", err));
+
+                const entryDocRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('entries').doc(gameId);
+                const unsubEntries = entryDocRef.onSnapshot((docSnap) => {
+                    if (docSnap.exists) {
+                        setEntries(docSnap.data().claims || {});
+                    }
+                }, (err) => console.error("Entries Sync Error:", err));
+
+                return () => {
+                    unsubGame();
+                    unsubEntries();
+                };
+            }, [user, gameId]);
+
+            const updateMemberCount = (newCount) => {
+                const count = Math.max(2, Math.min(40, newCount));
+                setMemberCount(count);
+                setPrizes(prev => {
+                    const next = [...prev];
+                    if (next.length < count) {
+                        while (next.length < count) next.push('はずれ');
+                    } else if (next.length > count) {
+                        return next.slice(0, count);
+                    }
+                    return next;
+                });
+            };
+
+            const joinedCount = useMemo(() => Object.values(entries).filter(n => n && typeof n === 'string' && n.trim() !== '').length, [entries]);
+            const isReady = joinedCount >= memberCount;
+            const hitCount = useMemo(() => prizes.filter(p => String(p).includes('当たり')).length, [prizes]);
+
+            const getColX = (idx) => 60 + idx * 80;
+
+            const calculateAllWinners = () => {
+                const foundWinners = [];
+                if (!prizes || prizes.length === 0) return foundWinners;
+
+                for (let startCol = 0; startCol < memberCount; startCol++) {
+                    let curIdx = startCol;
+                    const path = [{ x: getColX(curIdx), y: 60 }];
+
+                    lines.forEach(line => {
+                        if (line.col === curIdx) {
+                            path.push({ x: getColX(curIdx), y: line.y });
+                            curIdx++;
+                            path.push({ x: getColX(curIdx), y: line.y });
+                        } else if (line.col === curIdx - 1) {
+                            path.push({ x: getColX(curIdx), y: line.y });
+                            curIdx--;
+                            path.push({ x: getColX(curIdx), y: line.y });
+                        }
+                    });
+
+                    const finalPrize = String(prizes[curIdx] || '');
+                    if (finalPrize && finalPrize.includes('当たり')) {
+                        path.push({ x: getColX(curIdx), y: 460 });
+                        foundWinners.push({
+                            name: String(entries[startCol] || `${startCol + 1}番さん`),
+                            path,
+                            prize: finalPrize
+                        });
+                    }
+                }
+                return foundWinners;
+            };
+
+            useEffect(() => {
+                if (isRevealed) {
+                    setWinners(calculateAllWinners());
+                } else {
+                    setWinners([]);
+                }
+            }, [isRevealed, entries, lines, prizes]);
+
+            useEffect(() => {
+                if (view !== 'play' || !canvasRef.current) return;
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                canvas.width = (memberCount - 1) * 80 + 120;
+                canvas.height = 520;
+
+                const render = () => {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    const vStart = 60;
+                    const vEnd = 460;
+
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = '#e2e8f0';
+                    ctx.lineCap = 'round';
+                    for (let i = 0; i < memberCount; i++) {
+                        const x = getColX(i);
+                        ctx.beginPath();
+                        ctx.moveTo(x, vStart);
+                        ctx.lineTo(x, vEnd);
+                        ctx.stroke();
+
+                        if (isRevealed) {
+                            const prizeStr = String(prizes[i] || '');
+                            const isWinningSpot = prizeStr.includes('当たり');
+                            ctx.fillStyle = isWinningSpot ? '#f59e0b' : '#94a3b8';
+                            ctx.font = 'bold 12px sans-serif';
+                            ctx.textAlign = 'center';
+                            ctx.fillText(prizeStr, x, vEnd + 35);
+                        } else {
+                            ctx.fillStyle = '#cbd5e1';
+                            ctx.font = 'bold 16px sans-serif';
+                            ctx.textAlign = 'center';
+                            ctx.fillText('？', x, vEnd + 35);
+                        }
+                    }
+
+                    ctx.beginPath();
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = '#cbd5e1';
+                    lines.forEach(line => {
+                        ctx.moveTo(getColX(line.col), line.y);
+                        ctx.lineTo(getColX(line.col + 1), line.y);
+                    });
+                    ctx.stroke();
+
+                    if (isRevealed) {
+                        winners.forEach((w, idx) => {
+                            ctx.lineWidth = 6;
+                            ctx.strokeStyle = `hsla(${(idx * 137.5) % 360}, 75%, 55%, 0.9)`;
+                            ctx.lineJoin = 'round';
+                            ctx.lineCap = 'round';
+                            ctx.beginPath();
+                            const path = w.path;
+                            if (path && path.length >= 2) {
+                                ctx.moveTo(path[0].x, path[0].y);
+                                for (let i = 1; i < path.length; i++) {
+                                    ctx.lineTo(path[i].x, path[i].y);
+                                }
+                                ctx.stroke();
+                            }
+                        });
+                    }
+                };
+                render();
+            }, [view, lines, isRevealed, winners, memberCount, prizes]);
+
+            const createGame = async () => {
+                if (!user || !db) return;
+                const newGameId = Math.random().toString(36).substring(2, 9);
+                const newLines = [];
+                const numTracks = 20;
+                const startY = 80;
+                const trackHeight = 360 / numTracks;
+                
+                for (let t = 0; t < numTracks; t++) {
+                    let possibleCols = Array.from({length: memberCount - 1}, (_, i) => i);
+                    possibleCols.sort(() => Math.random() - 0.5);
+                    let usedColsInTrack = new Set();
+                    possibleCols.forEach(c => {
+                        if (!usedColsInTrack.has(c-1) && !usedColsInTrack.has(c) && !usedColsInTrack.has(c+1)) {
+                            if (Math.random() > 0.45) {
+                                const yOffset = Math.random() * (trackHeight * 0.8);
+                                const y = startY + (t * trackHeight) + yOffset;
+                                newLines.push({ col: c, y });
+                                usedColsInTrack.add(c);
+                            }
+                        }
+                    });
+                }
+                newLines.sort((a, b) => a.y - b.y);
+
+                try {
+                    const gameDocRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('games').doc(newGameId);
+                    await gameDocRef.set({
+                        title: String(gameTitle),
+                        memberCount,
+                        prizes: prizes.map(p => String(p)),
+                        lines: newLines,
+                        isRevealed: false,
+                        adminUid: user.uid,
+                        createdAt: Date.now()
+                    });
+
+                    const entryDocRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('entries').doc(newGameId);
+                    await entryDocRef.set({ claims: {} });
+
+                    setGameId(newGameId);
+                    window.location.hash = newGameId;
+                    setView('play');
+                } catch (err) {
+                    console.error("Create Error:", err);
+                }
+            };
+
+            const triggerReveal = async () => {
+                if (!gameId || !isReady || isRevealed || !db) return;
+                try {
+                    const gameDocRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('games').doc(gameId);
+                    await gameDocRef.update({ isRevealed: true });
+                } catch (err) {
+                    console.error("Reveal Trigger Error:", err);
+                }
+            };
+
+            const handleClaim = async (idx, name) => {
+                if (isRevealed || !gameId || !db) return;
+                const newClaims = { ...entries, [idx]: String(name) };
+                try {
+                    const entryDocRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('entries').doc(gameId);
+                    await entryDocRef.set({ claims: newClaims }, { merge: true });
+                } catch (err) {
+                    console.error("Entry Update Error:", err);
+                }
+            };
+
+            const copyUrl = () => {
+                const url = window.location.href;
+                const textArea = document.body.appendChild(document.createElement("textarea"));
+                textArea.value = url;
+                textArea.select();
+                document.execCommand("copy");
+                textArea.remove();
+            };
+
+            if (!user) return (
+                <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                    <div className="text-center animate-fade-in">
+                        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                        <p className="font-bold text-slate-400 uppercase tracking-widest text-sm">セッションを開始中...</p>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="min-h-screen bg-slate-50 text-slate-900 p-4 font-sans flex flex-col items-center">
+                    <div className="w-full max-w-4xl">
+                        
+                        {view === 'setup' && (
+                            <div className="bg-white rounded-3xl shadow-xl p-8 animate-fade-in">
+                                <h1 className="text-3xl font-black text-blue-600 mb-8 text-center italic tracking-tight underline decoration-blue-100 underline-offset-8 uppercase">あみだくじ管理画面</h1>
+                                
+                                <div className="space-y-6 mb-8">
+                                    <div className="p-6 bg-blue-50 rounded-2xl border border-blue-100">
+                                        <label className="block text-xs font-black text-blue-400 mb-2 uppercase tracking-widest">あみだくじのタイトル</label>
+                                        <input 
+                                            type="text"
+                                            value={gameTitle}
+                                            onChange={(e) => setGameTitle(e.target.value)}
+                                            className="w-full bg-white border border-blue-200 rounded-xl px-4 py-3 text-lg font-bold text-blue-800 outline-none"
+                                        />
+                                    </div>
+                                    <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
+                                        <label className="block text-xs font-black text-slate-400 mb-4 text-center uppercase tracking-widest">参加人数 (最大40人)</label>
+                                        <div className="flex items-center justify-center gap-6">
+                                            <button onClick={() => updateMemberCount(memberCount - 1)} className="w-12 h-12 bg-white rounded-full shadow-sm text-blue-600 text-xl font-bold border border-slate-100 transition hover:bg-blue-50">-</button>
+                                            <span className="text-5xl font-black text-blue-600 w-16 text-center">{memberCount}</span>
+                                            <button onClick={() => updateMemberCount(memberCount + 1)} className="w-12 h-12 bg-white rounded-full shadow-sm text-blue-600 text-xl font-bold border border-slate-100 hover:bg-blue-50">+</button>
+                                        </div>
+                                        <div className="mt-4">
+                                            <input 
+                                                type="range" min="2" max="40" value={memberCount} 
+                                                onChange={(e) => updateMemberCount(parseInt(e.target.value))}
+                                                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="mb-4 flex items-center justify-between">
+                                    <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest">賞品リスト</h2>
+                                    <div className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-[10px] font-black">
+                                        当たりの数: {hitCount}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                                    {prizes.map((p, i) => (
+                                        <div key={i} className="flex items-center bg-white rounded-xl p-3 border border-slate-200 shadow-sm transition-colors focus-within:border-blue-300">
+                                            <span className="w-8 text-[10px] font-black text-slate-300">#{i+1}</span>
+                                            <input 
+                                                type="text" value={String(p || '')} 
+                                                onChange={(e) => {
+                                                    const next = [...prizes];
+                                                    next[i] = e.target.value;
+                                                    setPrizes(next);
+                                                }}
+                                                className="flex-1 bg-transparent outline-none text-sm font-bold text-slate-700"
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <button onClick={createGame} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-2xl font-black text-xl shadow-lg transition active:scale-95">あみだくじURLを発行する</button>
+                            </div>
+                        )}
+
+                        {view === 'play' && (
+                            <div className="bg-white rounded-3xl shadow-2xl p-4 md:p-8 animate-fade-in">
+                                <div className="text-center mb-8">
+                                    <h2 className="text-2xl font-black text-slate-800 tracking-tight mb-2">{String(gameTitle)}</h2>
+                                    <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
+                                        {isAdmin && (
+                                            <button onClick={() => { window.location.hash = ''; setView('setup'); setGameId(null); setWinners([]); }} className="text-slate-400 hover:text-blue-500 font-bold text-xs uppercase tracking-widest transition">← 管理画面</button>
+                                        )}
+                                        <div className="flex items-center gap-3">
+                                            <div className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest ${isReady ? (isRevealed ? 'bg-blue-600 text-white' : 'bg-emerald-500 text-white shadow-lg') : 'bg-slate-100 text-slate-400'}`}>
+                                                {isRevealed ? '公開済み' : isReady ? '準備完了' : `待機中: ${joinedCount} / ${memberCount}`}
+                                            </div>
+                                            <div className="bg-yellow-50 text-yellow-600 px-4 py-2 rounded-full text-[10px] font-black border border-yellow-100 uppercase">当たりの数: {hitCount}</div>
+                                            {isAdmin && <button onClick={copyUrl} className="bg-white border border-slate-200 text-blue-600 px-4 py-2 rounded-full text-[10px] font-black hover:bg-blue-50 shadow-sm transition">URLコピー</button>}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="relative overflow-x-auto pb-6 custom-scrollbar">
+                                    <div className="inline-block min-w-full text-center">
+                                        <div className="flex mb-4 justify-center px-[60px]">
+                                            {Array.from({ length: memberCount }).map((_, i) => (
+                                                <div key={i} style={{ width: '80px' }} className="flex flex-col items-center px-1">
+                                                    <NameInput placeholder="名前" initialValue={String(entries[i] || '')} disabled={isRevealed} onSave={(name) => handleClaim(i, name)} />
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="p-4 bg-slate-50 rounded-3xl inline-block border border-slate-100 shadow-inner">
+                                            <canvas ref={canvasRef} className="mx-auto" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="mt-8 text-center min-h-[200px] flex flex-col justify-center items-center bg-white rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
+                                    {!isReady ? (
+                                        <div className="space-y-4 px-4">
+                                            <p className="text-slate-400 font-black text-xl uppercase tracking-tighter italic leading-tight">全員の名前が揃うまでお待ちください</p>
+                                            <div className="flex flex-wrap justify-center gap-1 max-w-lg mx-auto">
+                                                {Array.from({ length: memberCount }).map((_, i) => (<div key={i} className={`w-2.5 h-2.5 rounded-full transition-all duration-700 ${entries[i] ? 'bg-blue-500 scale-125 shadow-lg' : 'bg-slate-200'}`} />))}
+                                            </div>
+                                        </div>
+                                    ) : !isRevealed ? (
+                                        <div className="text-center px-4 w-full">
+                                            <p className="text-emerald-500 font-black text-xl mb-6 tracking-tight uppercase">全員が揃いました！</p>
+                                            <button onClick={triggerReveal} className="bg-blue-600 hover:bg-blue-700 text-white font-black text-2xl py-6 px-12 rounded-3xl shadow-2xl animate-bounce transform transition hover:scale-105 active:scale-95">結果を表示</button>
+                                            <p className="text-slate-400 text-[10px] font-bold mt-4 uppercase tracking-widest">ボタンを押すと当選ルートが公開されます</p>
+                                        </div>
+                                    ) : (
+                                        <div className="animate-in fade-in zoom-in-95 duration-700 text-center w-full px-4">
+                                            <p className="text-blue-600 font-black text-sm mb-6 uppercase tracking-widest tracking-[0.3em] underline decoration-blue-100 decoration-4 underline-offset-8">🎊 当選おめでとう！ 🎊</p>
+                                            <div className="flex flex-wrap justify-center gap-4 pb-6">
+                                                {winners.length > 0 ? winners.map((w, idx) => (
+                                                    <div key={idx} className="bg-white border-2 border-blue-100 rounded-2xl p-5 min-w-[150px] shadow-lg transform hover:scale-105 transition-transform">
+                                                        <div className="text-3xl font-black text-slate-900 mb-2">{String(w.name)}</div>
+                                                        <div className="inline-block px-4 py-1 bg-yellow-400 text-white text-xs font-black rounded-full shadow-md uppercase">{String(w.prize)}</div>
+                                                    </div>
+                                                )) : <div className="text-slate-400 italic">当選者はいません</div>}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
