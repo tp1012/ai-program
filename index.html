@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>アプリ一覧</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+      background-color: #f5f7fa;
+      color: #333;
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(135deg, #1a3a6b, #2e6db4);
+      color: white;
+      text-align: center;
+      padding: 48px 24px;
+    }
+
+    header h1 {
+      font-size: 2rem;
+      font-weight: bold;
+      letter-spacing: 0.1em;
+    }
+
+    header p {
+      margin-top: 8px;
+      font-size: 1rem;
+      opacity: 0.8;
+    }
+
+    main {
+      max-width: 960px;
+      margin: 48px auto;
+      padding: 0 24px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 24px;
+    }
+
+    a.card {
+      background: white;
+      border-radius: 12px;
+      padding: 32px 24px;
+      text-decoration: none;
+      color: #333;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      transition: transform 0.15s, box-shadow 0.15s;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    a.card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    }
+
+    .card-icon {
+      font-size: 2.4rem;
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: #1a3a6b;
+    }
+
+    .card-desc {
+      font-size: 0.875rem;
+      color: #666;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>アプリ一覧</h1>
+    <p>各アプリを選んでください</p>
+  </header>
+  <main>
+    <a class="card" href="amida/">
+      <div class="card-icon">🎯</div>
+      <div class="card-title">あみだくじ共有アプリ</div>
+      <div class="card-desc">オンラインで共有できるあみだくじ</div>
+    </a>
+    <a class="card" href="syain/">
+      <div class="card-icon">👥</div>
+      <div class="card-title">先輩社員紹介</div>
+      <div class="card-desc">先輩社員のプロフィール紹介ページ</div>
+    </a>
+    <a class="card" href="sekokan/">
+      <div class="card-icon">🏗️</div>
+      <div class="card-title">施工管理体験</div>
+      <div class="card-desc">工程管理システムの体験アプリ</div>
+    </a>
+    <a class="card" href="nw/">
+      <div class="card-icon">🎬</div>
+      <div class="card-title">縦型動画変換ツール</div>
+      <div class="card-desc">動画を縦型フォーマットに変換する</div>
+    </a>
+    <a class="card" href="video/">
+      <div class="card-icon">📡</div>
+      <div class="card-title">WiFi ヒートマップ</div>
+      <div class="card-desc">WiFi 電波強度のシミュレーター</div>
+    </a>
+  </main>
+</body>
+</html>
