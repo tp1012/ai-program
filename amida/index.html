@@ -88,7 +88,7 @@
                     onFocus={() => setIsFocused(true)}
                     onBlur={handleBlur}
                     onChange={(e) => setLocalValue(e.target.value)}
-                    className={`w-full text-center text-xs border-b-2 outline-none pb-2 transition-all duration-500 ${
+                    className={`w-full text-center text-sm border-b-2 outline-none pb-2 transition-all duration-500 ${
                         localValue ? 'border-blue-500 font-black text-slate-800' : 'border-slate-100 focus:border-blue-300 text-slate-300 italic'
                     }`}
                 />
@@ -415,16 +415,16 @@
                                 
                                 <div className="space-y-6 mb-8">
                                     <div className="p-6 bg-blue-50 rounded-2xl border border-blue-100">
-                                        <label className="block text-xs font-black text-blue-400 mb-2 uppercase tracking-widest">あみだくじのタイトル</label>
-                                        <input 
+                                        <label className="block text-sm font-black text-blue-400 mb-2 uppercase tracking-widest">あみだくじのタイトル</label>
+                                        <input
                                             type="text"
                                             value={gameTitle}
                                             onChange={(e) => setGameTitle(e.target.value)}
-                                            className="w-full bg-white border border-blue-200 rounded-xl px-4 py-3 text-lg font-bold text-blue-800 outline-none"
+                                            className="w-full bg-white border border-blue-200 rounded-xl px-4 py-3 text-xl font-bold text-blue-800 outline-none"
                                         />
                                     </div>
                                     <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
-                                        <label className="block text-xs font-black text-slate-400 mb-4 text-center uppercase tracking-widest">参加人数 (最大40人)</label>
+                                        <label className="block text-sm font-black text-slate-400 mb-4 text-center uppercase tracking-widest">参加人数 (最大40人)</label>
                                         <div className="flex items-center justify-center gap-6">
                                             <button onClick={() => updateMemberCount(memberCount - 1)} className="w-12 h-12 bg-white rounded-full shadow-sm text-blue-600 text-xl font-bold border border-slate-100 transition hover:bg-blue-50">-</button>
                                             <span className="text-5xl font-black text-blue-600 w-16 text-center">{memberCount}</span>
@@ -441,24 +441,24 @@
                                 </div>
 
                                 <div className="mb-4 flex items-center justify-between">
-                                    <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest">賞品リスト</h2>
-                                    <div className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-[10px] font-black">
+                                    <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest">賞品リスト</h2>
+                                    <div className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-xs font-black">
                                         当たりの数: {hitCount}
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8 max-h-72 overflow-y-auto pr-2 custom-scrollbar">
                                     {prizes.map((p, i) => (
                                         <div key={i} className="flex items-center bg-white rounded-xl p-3 border border-slate-200 shadow-sm transition-colors focus-within:border-blue-300">
-                                            <span className="w-8 text-[10px] font-black text-slate-300">#{i+1}</span>
-                                            <input 
-                                                type="text" value={String(p || '')} 
+                                            <span className="w-8 text-xs font-black text-slate-300">#{i+1}</span>
+                                            <input
+                                                type="text" value={String(p || '')}
                                                 onChange={(e) => {
                                                     const next = [...prizes];
                                                     next[i] = e.target.value;
                                                     setPrizes(next);
                                                 }}
-                                                className="flex-1 bg-transparent outline-none text-sm font-bold text-slate-700"
+                                                className="flex-1 bg-transparent outline-none text-base font-bold text-slate-700"
                                             />
                                         </div>
                                     ))}
@@ -474,14 +474,14 @@
                                     <h2 className="text-2xl font-black text-slate-800 tracking-tight mb-2">{String(gameTitle)}</h2>
                                     <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
                                         {isAdmin && (
-                                            <button onClick={() => { window.location.hash = ''; setView('setup'); setGameId(null); setWinners([]); }} className="text-slate-400 hover:text-blue-500 font-bold text-xs uppercase tracking-widest transition">← 管理画面</button>
+                                            <button onClick={() => { window.location.hash = ''; setView('setup'); setGameId(null); setWinners([]); }} className="text-slate-400 hover:text-blue-500 font-bold text-sm uppercase tracking-widest transition">← 管理画面</button>
                                         )}
                                         <div className="flex items-center gap-3">
-                                            <div className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest ${isReady ? (isRevealed ? 'bg-blue-600 text-white' : 'bg-emerald-500 text-white shadow-lg') : 'bg-slate-100 text-slate-400'}`}>
+                                            <div className={`px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest ${isReady ? (isRevealed ? 'bg-blue-600 text-white' : 'bg-emerald-500 text-white shadow-lg') : 'bg-slate-100 text-slate-400'}`}>
                                                 {isRevealed ? '公開済み' : isReady ? '準備完了' : `待機中: ${joinedCount} / ${memberCount}`}
                                             </div>
-                                            <div className="bg-yellow-50 text-yellow-600 px-4 py-2 rounded-full text-[10px] font-black border border-yellow-100 uppercase">当たりの数: {hitCount}</div>
-                                            {isAdmin && <button onClick={copyUrl} className="bg-white border border-slate-200 text-blue-600 px-4 py-2 rounded-full text-[10px] font-black hover:bg-blue-50 shadow-sm transition">URLコピー</button>}
+                                            <div className="bg-yellow-50 text-yellow-600 px-4 py-2 rounded-full text-xs font-black border border-yellow-100 uppercase">当たりの数: {hitCount}</div>
+                                            {isAdmin && <button onClick={copyUrl} className="bg-white border border-slate-200 text-blue-600 px-4 py-2 rounded-full text-xs font-black hover:bg-blue-50 shadow-sm transition">URLコピー</button>}
                                         </div>
                                     </div>
                                 </div>
@@ -513,11 +513,11 @@
                                         <div className="text-center px-4 w-full">
                                             <p className="text-emerald-500 font-black text-xl mb-6 tracking-tight uppercase">全員が揃いました！</p>
                                             <button onClick={triggerReveal} className="bg-blue-600 hover:bg-blue-700 text-white font-black text-2xl py-6 px-12 rounded-3xl shadow-2xl animate-bounce transform transition hover:scale-105 active:scale-95">結果を表示</button>
-                                            <p className="text-slate-400 text-[10px] font-bold mt-4 uppercase tracking-widest">ボタンを押すと当選ルートが公開されます</p>
+                                            <p className="text-slate-400 text-xs font-bold mt-4 uppercase tracking-widest">ボタンを押すと当選ルートが公開されます</p>
                                         </div>
                                     ) : (
                                         <div className="animate-in fade-in zoom-in-95 duration-700 text-center w-full px-4">
-                                            <p className="text-blue-600 font-black text-sm mb-6 uppercase tracking-widest tracking-[0.3em] underline decoration-blue-100 decoration-4 underline-offset-8">🎊 当選おめでとう！ 🎊</p>
+                                            <p className="text-blue-600 font-black text-base mb-6 uppercase tracking-widest tracking-[0.3em] underline decoration-blue-100 decoration-4 underline-offset-8">🎊 当選おめでとう！ 🎊</p>
                                             <div className="flex flex-wrap justify-center gap-4 pb-6">
                                                 {winners.length > 0 ? winners.map((w, idx) => (
                                                     <div key={idx} className="bg-white border-2 border-blue-100 rounded-2xl p-5 min-w-[150px] shadow-lg transform hover:scale-105 transition-transform">
