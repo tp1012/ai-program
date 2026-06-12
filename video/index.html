@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>縦型動画変換ツール</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Noto Sans JP', sans-serif; }
+    .drop-active { border-color: #6366f1 !important; background-color: #eef2ff !important; }
+    #progress-fill { transition: width 0.3s ease; }
+    input[type="number"]:disabled { opacity: 0.35; cursor: not-allowed; }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+  <header class="bg-white border-b border-slate-200 px-4 py-5">
+    <div class="max-w-2xl mx-auto">
+      <h1 class="text-xl font-black text-slate-800">縦型動画変換ツール</h1>
+      <p class="text-sm text-slate-500 mt-0.5">YouTube Shorts / Instagram Reels 対応（1080×1920）</p>
+    </div>
+  </header>
+
+  <main class="max-w-2xl mx-auto px-4 py-8 space-y-4">
+
+    <!-- ① ファイル選択 -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+      <p class="text-xs font-black text-indigo-400 uppercase tracking-widest mb-3">① ファイル選択</p>
+      <div id="drop-zone"
+        class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center cursor-pointer
+               hover:border-indigo-400 hover:bg-indigo-50 transition-colors">
+        <input type="file" id="file-input" accept="video/*" class="hidden">
+        <p class="text-slate-600 font-medium">動画をドラッグ＆ドロップ</p>
+        <p class="text-slate-400 text-sm mt-1">またはクリックして選択</p>
+      </div>
+      <div id="preview-area" class="hidden mt-4 space-y-2">
+        <video id="preview" controls
+          class="w-full rounded-xl bg-black max-h-56 object-contain"></video>
+        <p id="file-info" class="text-sm text-slate-500"></p>
+      </div>
+    </section>
+
+    <!-- ② 切り出し区間 -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+      <p class="text-xs font-black text-indigo-400 uppercase tracking-widest mb-3">② 切り出し区間</p>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-600 mb-1">開始（秒）</label>
+          <input id="start-sec" type="number" min="0" step="0.1" value="0"
+            class="w-full border border-slate-300 rounded-xl px-3 py-2 text-slate-800
+                   focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-600 mb-1">終了（秒）</label>
+          <input id="end-sec" type="number" min="0" step="0.1" value="10"
+            class="w-full border border-slate-300 rounded-xl px-3 py-2 text-slate-800
+                   focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </div>
+      </div>
+      <p class="text-sm text-slate-500 mt-2">
+        クリップ長: <span id="clip-duration" class="font-bold text-slate-700">10.0</span> 秒
+      </p>
+    </section>
+
+    <!-- ③ 演出設定 -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+      <p class="text-xs font-black text-indigo-400 uppercase tracking-widest mb-3">③ 演出設定</p>
+      <div class="space-y-3">
+        <div class="flex items-center gap-3">
+          <input type="checkbox" id="fade-in-enabled" class="w-4 h-4 accent-indigo-600 cursor-pointer">
+          <label for="fade-in-enabled" class="text-sm font-medium text-slate-700 w-28 cursor-pointer">フェードイン</label>
+          <input id="fade-in-dur" type="number" min="0.1" max="5" step="0.1" value="0.5" disabled
+            class="w-20 border border-slate-300 rounded-xl px-3 py-1.5 text-sm text-slate-800
+                   focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          <span class="text-sm text-slate-500">秒</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <input type="checkbox" id="fade-out-enabled" class="w-4 h-4 accent-indigo-600 cursor-pointer">
+          <label for="fade-out-enabled" class="text-sm font-medium text-slate-700 w-28 cursor-pointer">フェードアウト</label>
+          <input id="fade-out-dur" type="number" min="0.1" max="5" step="0.1" value="0.5" disabled
+            class="w-20 border border-slate-300 rounded-xl px-3 py-1.5 text-sm text-slate-800
+                   focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          <span class="text-sm text-slate-500">秒</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ④ 変換 -->
+    <section id="card-convert" class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+      <p class="text-xs font-black text-indigo-400 uppercase tracking-widest mb-3">④ 変換</p>
+      <p class="text-xs text-slate-400 mb-4">リアルタイム処理です。60秒のクリップは約60秒かかります。</p>
+      <button id="btn-convert"
+        class="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95
+               text-white font-black text-base py-4 rounded-xl shadow-lg transition-all">
+        変換開始
+      </button>
+    </section>
+
+    <!-- ⑤ 変換中 -->
+    <section id="card-progress" class="hidden bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+      <p class="text-xs font-black text-indigo-400 uppercase tracking-widest mb-3">⑤ 変換中</p>
+      <div class="bg-slate-100 rounded-full h-3 overflow-hidden">
+        <div id="progress-fill" class="bg-indigo-600 h-3 rounded-full" style="width:0%"></div>
+      </div>
+      <div class="flex justify-between items-center mt-2">
+        <p id="log-display" class="text-xs text-slate-400 font-mono"></p>
+        <p id="progress-label" class="text-sm font-black text-indigo-600 shrink-0">0%</p>
+      </div>
+    </section>
+
+    <!-- ⑥ 完成 -->
+    <section id="card-done" class="hidden bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+      <p class="text-xs font-black text-emerald-500 uppercase tracking-widest mb-3">⑥ 完成</p>
+      <p id="output-info" class="text-sm text-slate-500 mb-3"></p>
+      <a id="btn-download" href="#" download="shorts.webm"
+        class="block w-full text-center bg-emerald-500 hover:bg-emerald-600 active:scale-95
+               text-white font-black text-base py-4 rounded-xl shadow-lg transition-all">
+        ダウンロード
+      </a>
+      <button id="btn-reset"
+        class="w-full mt-3 border border-slate-200 hover:bg-slate-50 text-slate-600
+               font-medium text-sm py-3 rounded-xl transition-colors">
+        もう一度変換する
+      </button>
+    </section>
+
+    <!-- 非表示キャンバス（描画用） -->
+    <canvas id="work-canvas"  width="1080" height="1920" class="hidden"></canvas>
+    <!-- 非表示キャンバス（背景ぼかし用 極小） -->
+    <canvas id="blur-canvas"  width="108"  height="192"  class="hidden"></canvas>
+
+  </main>
+
+  <script>
+    let selectedFile = null;
+    let previewURL   = null;
+    let outputURL    = null;
+
+    const dropZone      = document.getElementById('drop-zone');
+    const fileInput     = document.getElementById('file-input');
+    const previewArea   = document.getElementById('preview-area');
+    const previewEl     = document.getElementById('preview');
+    const fileInfoEl    = document.getElementById('file-info');
+    const startSecEl    = document.getElementById('start-sec');
+    const endSecEl      = document.getElementById('end-sec');
+    const clipDurEl     = document.getElementById('clip-duration');
+    const fadeInChk     = document.getElementById('fade-in-enabled');
+    const fadeInDurEl   = document.getElementById('fade-in-dur');
+    const fadeOutChk    = document.getElementById('fade-out-enabled');
+    const fadeOutDurEl  = document.getElementById('fade-out-dur');
+    const cardConvert   = document.getElementById('card-convert');
+    const cardProgress  = document.getElementById('card-progress');
+    const cardDone      = document.getElementById('card-done');
+    const btnConvert    = document.getElementById('btn-convert');
+    const progressFill  = document.getElementById('progress-fill');
+    const progressLabel = document.getElementById('progress-label');
+    const logDisplay    = document.getElementById('log-display');
+    const btnDownload   = document.getElementById('btn-download');
+    const btnReset      = document.getElementById('btn-reset');
+    const outputInfoEl  = document.getElementById('output-info');
+    const workCanvas    = document.getElementById('work-canvas');
+    const blurCanvas    = document.getElementById('blur-canvas');
+
+    // ── ファイル選択 ───────────────────────────────────────────────────────
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drop-active'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drop-active'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('drop-active');
+      if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) handleFile(fileInput.files[0]);
+    });
+
+    function handleFile(file) {
+      selectedFile = file;
+      if (previewURL) URL.revokeObjectURL(previewURL);
+      previewURL = URL.createObjectURL(file);
+      previewEl.src = previewURL;
+      previewArea.classList.remove('hidden');
+      fileInfoEl.textContent = `${file.name}　${(file.size / 1024 / 1024).toFixed(1)} MB`;
+      previewEl.onloadedmetadata = () => {
+        if (isFinite(previewEl.duration)) {
+          endSecEl.value = previewEl.duration.toFixed(1);
+          updateTrimInfo();
+        }
+      };
+      updateTrimInfo();
+    }
+
+    [startSecEl, endSecEl].forEach(el => el.addEventListener('input', updateTrimInfo));
+    function updateTrimInfo() {
+      const dur = Math.max(0, (parseFloat(endSecEl.value) || 0) - (parseFloat(startSecEl.value) || 0));
+      clipDurEl.textContent = dur.toFixed(1);
+    }
+
+    fadeInChk.addEventListener('change',  () => { fadeInDurEl.disabled  = !fadeInChk.checked; });
+    fadeOutChk.addEventListener('change', () => { fadeOutDurEl.disabled = !fadeOutChk.checked; });
+
+    // ── 変換 ──────────────────────────────────────────────────────────────
+    btnConvert.addEventListener('click', startConversion);
+
+    async function startConversion() {
+      if (!selectedFile) { alert('動画ファイルを選択してください。'); return; }
+
+      const startSec   = parseFloat(startSecEl.value) || 0;
+      const endSec     = parseFloat(endSecEl.value)   || 0;
+      if (startSec >= endSec) { alert('終了秒は開始秒より大きい値を入力してください。'); return; }
+
+      const clipDur    = endSec - startSec;
+      const fadeIn     = fadeInChk.checked;
+      const fadeInDur  = Math.min(parseFloat(fadeInDurEl.value)  || 0.5, clipDur / 2);
+      const fadeOut    = fadeOutChk.checked;
+      const fadeOutDur = Math.min(parseFloat(fadeOutDurEl.value) || 0.5, clipDur / 2);
+
+      cardConvert.classList.add('hidden');
+      cardProgress.classList.remove('hidden');
+      progressFill.style.width = '0%';
+      progressLabel.textContent = '0%';
+      logDisplay.textContent = '';
+
+      try {
+        // 変換専用の video 要素
+        const vid = document.createElement('video');
+        vid.src = previewURL;
+        vid.playsInline = true;
+        await new Promise((resolve, reject) => {
+          vid.onloadedmetadata = resolve;
+          vid.onerror = () => reject(new Error('動画の読み込みに失敗しました'));
+        });
+
+        const vw = vid.videoWidth;
+        const vh = vid.videoHeight;
+
+        // ── キャンバス準備 ───────────────────────────────────────────────
+        const ctx     = workCanvas.getContext('2d');
+        const blurCtx = blurCanvas.getContext('2d');
+        const BW = blurCanvas.width;   // 108
+        const BH = blurCanvas.height;  // 192
+
+        // 背景（極小キャンバス用）描画パラメータ
+        const bgS  = Math.max(BW / vw, BH / vh);
+        const bgW_ = vw * bgS, bgH_ = vh * bgS;
+        const bgX_ = (BW - bgW_) / 2, bgY_ = (BH - bgH_) / 2;
+
+        // 前景（メインキャンバス用）描画パラメータ
+        const fgH = vh * (1080 / vw);
+        const fgY = (1920 - fgH) / 2;
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        // ── AudioContext ─────────────────────────────────────────────────
+        const audioCtx  = new AudioContext();
+        await audioCtx.resume();
+        const audioSrc  = audioCtx.createMediaElementSource(vid);
+        const gainNode  = audioCtx.createGain();
+        gainNode.gain.value = 1;
+        const audioDest = audioCtx.createMediaStreamDestination();
+        audioSrc.connect(gainNode);
+        gainNode.connect(audioDest);
+
+        // ── MIME 判定 ────────────────────────────────────────────────────
+        const mimeType =
+          MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' :
+          MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus' :
+          MediaRecorder.isTypeSupported('video/mp4')                  ? 'video/mp4' :
+          'video/webm';
+        const ext = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+
+        // ── MediaRecorder ────────────────────────────────────────────────
+        const videoStream    = workCanvas.captureStream(30);
+        const combinedStream = new MediaStream([
+          ...videoStream.getVideoTracks(),
+          ...audioDest.stream.getAudioTracks(),
+        ]);
+        const recorder = new MediaRecorder(combinedStream, { mimeType });
+        const chunks   = [];
+        recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
+        // シーク
+        vid.currentTime = startSec;
+        await new Promise(resolve => { vid.onseeked = resolve; });
+
+        // 録画開始（1秒ごとにチャンク収集）
+        recorder.start(1000);
+        vid.play();
+
+        // プログレス更新
+        const progressTimer = setInterval(() => {
+          const elapsed = Math.max(0, vid.currentTime - startSec);
+          const pct     = Math.min(100, Math.round(elapsed / clipDur * 100));
+          progressFill.style.width  = pct + '%';
+          progressLabel.textContent = pct + '%';
+          logDisplay.textContent    = `${elapsed.toFixed(1)}s / ${clipDur.toFixed(1)}s`;
+        }, 300);
+
+        // ── 描画関数 ─────────────────────────────────────────────────────
+        function drawFrame() {
+          const elapsed = vid.currentTime - startSec;
+
+          // フェード係数（0=黒、1=通常）
+          let alpha = 1;
+          if (fadeIn  && elapsed < fadeInDur)              alpha = Math.min(1, elapsed / fadeInDur);
+          if (fadeOut && elapsed > clipDur - fadeOutDur)   alpha = Math.min(alpha, Math.max(0, (clipDur - elapsed) / fadeOutDur));
+
+          gainNode.gain.value = alpha;
+
+          // 背景：極小キャンバスに描画してメインに拡大（= ぼかし効果）
+          blurCtx.drawImage(vid, bgX_, bgY_, bgW_, bgH_);
+          ctx.drawImage(blurCanvas, 0, 0, BW, BH, 0, 0, 1080, 1920);
+
+          // 前景
+          ctx.drawImage(vid, 0, fgY, 1080, fgH);
+
+          // フェードオーバーレイ
+          const ov = 1 - alpha;
+          if (ov > 0.005) {
+            ctx.fillStyle = `rgba(0,0,0,${ov.toFixed(3)})`;
+            ctx.fillRect(0, 0, 1080, 1920);
+          }
+        }
+
+        // ── 描画ループ（requestVideoFrameCallback 優先） ─────────────────
+        function onFrame() {
+          if (vid.currentTime >= endSec || vid.ended) {
+            clearInterval(progressTimer);
+            recorder.stop();
+            vid.pause();
+            return;
+          }
+          drawFrame();
+          scheduleNext();
+        }
+
+        function scheduleNext() {
+          if ('requestVideoFrameCallback' in vid) {
+            vid.requestVideoFrameCallback(onFrame);
+          } else {
+            requestAnimationFrame(onFrame);
+          }
+        }
+
+        scheduleNext();
+
+        // ── 録画完了 ─────────────────────────────────────────────────────
+        recorder.onstop = () => {
+          audioCtx.close();
+          progressFill.style.width  = '100%';
+          progressLabel.textContent = '100%';
+
+          const blob = new Blob(chunks, { type: mimeType.split(';')[0] });
+          if (outputURL) URL.revokeObjectURL(outputURL);
+          outputURL = URL.createObjectURL(blob);
+
+          const ts = new Date().toISOString().slice(0, 19)
+            .replace(/[-:T]/g, '').replace(/(\d{8})(\d{6})/, '$1_$2');
+          btnDownload.download = `shorts_${ts}.${ext}`;
+          btnDownload.href     = outputURL;
+          outputInfoEl.textContent =
+            `形式: ${ext.toUpperCase()}　サイズ: ${(blob.size / 1024 / 1024).toFixed(1)} MB`;
+
+          cardProgress.classList.add('hidden');
+          cardDone.classList.remove('hidden');
+        };
+
+      } catch (err) {
+        cardProgress.classList.add('hidden');
+        cardConvert.classList.remove('hidden');
+        console.error(err);
+        alert('変換中にエラーが発生しました。\n\n' + (err.message || String(err)));
+      }
+    }
+
+    btnReset.addEventListener('click', () => {
+      cardDone.classList.add('hidden');
+      cardConvert.classList.remove('hidden');
+    });
+  </script>
+</body>
+</html>
