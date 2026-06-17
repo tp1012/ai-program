@@ -13,8 +13,6 @@
     <script src="https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore-compat.js"></script>
     
     <script src="firebase-config.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-    <script src="emailjs-config.js"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap');
@@ -78,12 +76,6 @@
             }
         }
 
-        // EmailJS initialization
-        const isEmailjsEnabled = !!(window.emailjsConfig && window.emailjsConfig.publicKey && window.emailjsConfig.publicKey !== 'YOUR_PUBLIC_KEY');
-        if (isEmailjsEnabled && typeof emailjs !== 'undefined') {
-            emailjs.init({ publicKey: window.emailjsConfig.publicKey });
-        }
-
         /**
          * 日本語入力（IME）を安定させるためのカスタム入力コンポーネント
          */
@@ -133,8 +125,6 @@
             const [winners, setWinners] = useState([]);
             const [isAdmin, setIsAdmin] = useState(false);
             const [nameErrors, setNameErrors] = useState({});
-            const [adminEmail, setAdminEmail] = useState('');
-            const [emailNotified, setEmailNotified] = useState(false);
 
             const canvasRef = useRef(null);
             const scrollRef = useRef(null);
@@ -199,8 +189,6 @@
                         setGameTitle(String(data.title || 'あみだくじ'));
                         setIsRevealed(!!data.isRevealed);
                         setIsAdmin(data.adminUid === user.uid);
-                        setAdminEmail(data.adminEmail || '');
-                        setEmailNotified(!!data.emailNotified);
                         setView('play');
                     } else {
                         setView('setup');
@@ -282,37 +270,7 @@
                 }
             }, [isRevealed, entries, lines, prizes]);
 
-            // 全員揃ったら管理者メールアドレスに通知
-            useEffect(() => {
-                if (!isReady || isRevealed || emailNotified) return;
-                if (!isEmailjsEnabled || !adminEmail || typeof emailjs === 'undefined') return;
-                if (!gameId || !db) return;
 
-                const sendEmailNotification = async () => {
-                    const gameDocRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('games').doc(gameId);
-                    let shouldSend = false;
-                    try {
-                        await db.runTransaction(async (txn) => {
-                            const doc = await txn.get(gameDocRef);
-                            if (doc.exists && !doc.data().emailNotified) {
-                                shouldSend = true;
-                                txn.update(gameDocRef, { emailNotified: true });
-                            }
-                        });
-                        if (shouldSend) {
-                            await emailjs.send(window.emailjsConfig.serviceId, window.emailjsConfig.templateId, {
-                                to_email: adminEmail,
-                                game_title: gameTitle,
-                                member_count: String(memberCount),
-                            });
-                            console.log('Email notification sent.');
-                        }
-                    } catch (err) {
-                        console.error('Email notification error:', err);
-                    }
-                };
-                sendEmailNotification();
-            }, [isReady, isRevealed, emailNotified, adminEmail, gameTitle, memberCount, gameId]);
 
             useEffect(() => {
                 if (view !== 'play' || !canvasRef.current) return;
@@ -415,8 +373,6 @@
                         lines: newLines,
                         isRevealed: false,
                         adminUid: user.uid,
-                        adminEmail: adminEmail.trim(),
-                        emailNotified: false,
                         createdAt: Date.now()
                     });
 
@@ -499,19 +455,6 @@
                                             className="w-full bg-white border border-blue-200 rounded-xl px-4 py-3 text-xl font-bold text-blue-800 outline-none"
                                         />
                                     </div>
-                                    <div className="p-6 bg-emerald-50 rounded-2xl border border-emerald-100">
-                                        <label className="block text-sm font-black text-emerald-500 mb-2 uppercase tracking-widest">📧 通知メールアドレス</label>
-                                        <input
-                                            type="email"
-                                            placeholder="admin@example.com"
-                                            value={adminEmail}
-                                            onChange={(e) => setAdminEmail(e.target.value)}
-                                            className="w-full bg-white border border-emerald-200 rounded-xl px-4 py-3 text-base font-bold text-slate-800 outline-none"
-                                        />
-                                        {!isEmailjsEnabled && (
-                                            <p className="text-xs text-amber-600 mt-2 font-bold">⚠ emailjs-config.js を設定するとメール通知が届きます</p>
-                                        )}
-                                    </div>
                                     <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
                                         <label className="block text-sm font-black text-slate-400 mb-4 text-center uppercase tracking-widest">参加人数 (最大50人)</label>
                                         <div className="flex items-center justify-center gap-6">
@@ -575,16 +518,6 @@
                                             🏆 当たり {hitCount}個
                                         </div>
                                         {isAdmin && <button onClick={copyUrl} className="bg-slate-50 border border-slate-200 text-blue-600 px-3 py-1.5 rounded-full text-xs font-black hover:bg-blue-50 shadow-sm transition flex items-center gap-1">🔗 URLコピー</button>}
-                                        {isAdmin && adminEmail && !emailNotified && (
-                                            <div className="bg-emerald-50 border border-emerald-100 text-emerald-600 px-3 py-1.5 rounded-full text-xs font-black flex items-center gap-1">
-                                                📧 {adminEmail}
-                                            </div>
-                                        )}
-                                        {isAdmin && adminEmail && emailNotified && (
-                                            <div className="bg-blue-50 border border-blue-100 text-blue-500 px-3 py-1.5 rounded-full text-xs font-black flex items-center gap-1">
-                                                ✉ 通知送信済み
-                                            </div>
-                                        )}
                                     </div>
                                 </div>
 
