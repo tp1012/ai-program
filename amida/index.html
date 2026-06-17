@@ -125,9 +125,13 @@
             const [winners, setWinners] = useState([]);
             const [isAdmin, setIsAdmin] = useState(false);
             const [nameErrors, setNameErrors] = useState({});
+            const [notifPermission, setNotifPermission] = useState(
+                ('Notification' in window) ? Notification.permission : 'unsupported'
+            );
 
             const canvasRef = useRef(null);
             const scrollRef = useRef(null);
+            const notifiedRef = useRef(false);
 
             // Firebaseが有効でない場合の表示
             if (!isFirebaseEnabled) {
@@ -210,7 +214,7 @@
             }, [user, gameId]);
 
             const updateMemberCount = (newCount) => {
-                const count = Math.max(2, Math.min(40, newCount));
+                const count = Math.max(2, Math.min(50, newCount));
                 setMemberCount(count);
                 setPrizes(prev => {
                     const next = [...prev];
@@ -269,6 +273,27 @@
                     setWinners([]);
                 }
             }, [isRevealed, entries, lines, prizes]);
+
+            // 管理者: プレイ画面に入ったら通知許可をリクエスト
+            useEffect(() => {
+                if (!isAdmin || view !== 'play') return;
+                if (!('Notification' in window) || Notification.permission !== 'default') return;
+                Notification.requestPermission().then(p => setNotifPermission(p));
+            }, [isAdmin, view]);
+
+            // 全員揃ったら管理者に通知
+            useEffect(() => {
+                if (!isAdmin || view !== 'play' || isRevealed) return;
+                if (isReady && !notifiedRef.current) {
+                    notifiedRef.current = true;
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        new Notification('あみだくじ準備完了！🎯', {
+                            body: `「${gameTitle}」の参加者 ${memberCount} 名全員の名前が揃いました`,
+                        });
+                    }
+                }
+                if (!isReady) notifiedRef.current = false;
+            }, [isReady, isAdmin, view, isRevealed, gameTitle, memberCount]);
 
             useEffect(() => {
                 if (view !== 'play' || !canvasRef.current) return;
@@ -454,7 +479,7 @@
                                         />
                                     </div>
                                     <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
-                                        <label className="block text-sm font-black text-slate-400 mb-4 text-center uppercase tracking-widest">参加人数 (最大40人)</label>
+                                        <label className="block text-sm font-black text-slate-400 mb-4 text-center uppercase tracking-widest">参加人数 (最大50人)</label>
                                         <div className="flex items-center justify-center gap-6">
                                             <button onClick={() => updateMemberCount(memberCount - 1)} className="w-12 h-12 bg-white rounded-full shadow-sm text-blue-600 text-xl font-bold border border-slate-100 transition hover:bg-blue-50">-</button>
                                             <span className="text-5xl font-black text-blue-600 w-16 text-center">{memberCount}</span>
@@ -462,7 +487,7 @@
                                         </div>
                                         <div className="mt-4">
                                             <input 
-                                                type="range" min="2" max="40" value={memberCount} 
+                                                type="range" min="2" max="50" value={memberCount} 
                                                 onChange={(e) => updateMemberCount(parseInt(e.target.value))}
                                                 className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                                             />
@@ -516,6 +541,22 @@
                                             🏆 当たり {hitCount}個
                                         </div>
                                         {isAdmin && <button onClick={copyUrl} className="bg-slate-50 border border-slate-200 text-blue-600 px-3 py-1.5 rounded-full text-xs font-black hover:bg-blue-50 shadow-sm transition flex items-center gap-1">🔗 URLコピー</button>}
+                                        {isAdmin && notifPermission === 'default' && (
+                                            <button onClick={() => Notification.requestPermission().then(p => setNotifPermission(p))}
+                                                className="bg-amber-50 border border-amber-200 text-amber-700 px-3 py-1.5 rounded-full text-xs font-black hover:bg-amber-100 shadow-sm transition flex items-center gap-1">
+                                                🔔 通知を許可する
+                                            </button>
+                                        )}
+                                        {isAdmin && notifPermission === 'granted' && (
+                                            <div className="bg-emerald-50 border border-emerald-100 text-emerald-600 px-3 py-1.5 rounded-full text-xs font-black flex items-center gap-1">
+                                                🔔 通知ON
+                                            </div>
+                                        )}
+                                        {isAdmin && notifPermission === 'denied' && (
+                                            <div className="bg-slate-50 border border-slate-200 text-slate-400 px-3 py-1.5 rounded-full text-xs font-black flex items-center gap-1">
+                                                🔕 通知OFF
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
