@@ -1,2 +1,6 @@
 [build]
   publish = "."
+
+[[edge_functions]]
+  path = "/amida/firebase-config.js"
+  function = "firebase-config"
